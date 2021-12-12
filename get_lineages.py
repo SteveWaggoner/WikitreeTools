@@ -187,38 +187,6 @@ def saveCacheProfileDNA():
     f.close()
 
 
-def printProfile(row, padding='', light=False):
-
-    userId = row['User ID']
-    wikitreeId = row['WikiTree ID']
-    firstName = row['First Name']
-    middleName = row['Middle Name']
-    lastName = row['Last Name at Birth']
-    birthDate = (row['Birth Date'])[:4]
-    deathDate = (row['Death Date'])[:4]
-
-    birthLocation = row['Birth Location']
-    deathLocation = row['Death Location']
-
-    father = int(row['Father'])
-    mother = int(row['Mother'])
-    if 'Children' in row:
-        children = row['Children']
-    else:
-        children = None
-
-    if light:
-        dna = row['DNA']
-        line = row['Line']
-        print padding, wikitreeId, firstName, middleName, lastName, \
-            birthDate, birthLocation, deathDate, deathLocation, dna, \
-            line
-    else:
-        print padding, userId, wikitreeId, firstName, middleName, \
-            lastName, birthDate, birthLocation, deathDate, \
-            deathLocation, father, mother, children
-
-
 cachedUserIds = {}
 
 
@@ -488,7 +456,7 @@ def getAncestors(profiles, dnaLines):
         if not ancestorId in ancestors:
 
             ancestor = profiles[ancestorId]
-            if int(ancestor['Father']) == 0:
+            if getFather(ancestor, profiles) == None:
                 ancestor['Gen'] = countGenerations(ancestor, profiles)
                 ancestor['Descendents'] = countDescendents(ancestor,
                         profiles)
