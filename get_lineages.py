@@ -31,7 +31,7 @@ cli_parser.add_argument('--category-file', metavar='PATH', type=str,
                         default='data/dump_categories.csv.gz',
                         help='Path to category file')
 cli_parser.add_argument('--min-gen', metavar='GEN', type=int,
-                        default=3,
+                        default=4,
                         help='Minimum tree depth to include in output')
 
 cli_parser.add_argument('--min-gen-dna', metavar='GEN', type=int,
@@ -115,7 +115,7 @@ def getProfileDNA(profile):
     global cacheTrys
     global cacheHits
 
-    if cacheTrys % 100 == 0:
+    if cacheTrys % 100 == 0 and cacheTrys > cacheHits:
         saveCacheProfileDNA()
 
     cacheTrys = cacheTrys + 1
@@ -683,6 +683,8 @@ def printAncestors(profiles):
             )
 
     print '|}'
+
+    log(" wrote {n} lineages".format(n=n))
 
 
 def main():
