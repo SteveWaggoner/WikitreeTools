@@ -364,7 +364,7 @@ def getPeople():
     for line in openGz(args.people_user_file):
         i = i + 1
         if i % 1000000 == 0:
-            logr(i)
+            logr(str(i) + "  " + str(len(profiles)))
 
         if i == 1:
             tokens = line.strip().split('\t')
@@ -422,11 +422,11 @@ def getProfileLabel(profile):
     birth_location = getAbbreviatedLocation(profile['Birth Location'])
     death_location = getAbbreviatedLocation(profile['Death Location'])
 
+    if birth_location == death_location:
+        death_location = ''
+
     birth_text = (birth_year + ' ' + birth_location).strip()
     death_text = (death_year + ' ' + death_location).strip()
-
-    if birth_location == death_location:
-        death_text = ''
 
     dates = ''
     if birth_text != '' and death_text != '':
@@ -442,6 +442,22 @@ def getProfileLabel(profile):
             ' ' + profile['Middle Name']).strip(),
             last=profile['Last Name at Birth'], dates=dates)
     return label
+
+
+def isGood(profile):
+
+    # criteria: must have dna, be assign to a line or be in the study
+    try:
+        has_dna = int(profile['DNA'][1]) > 0
+    except:
+        has_dna = True   # if don't know, assume you have it
+
+    good = profile['Gen'] >= args.min_gen \
+            or (profile['Gen'] >= args.min_gen_dna and has_dna) \
+            or (profile['Gen'] >= args.min_gen_dna_exact_name and has_dna and profile['Last Name at Birth'] == exactSurname) \
+            or profile['Line'] != None \
+            or profile['User ID'] in studyIds
+    return good
 
 
 def getAncestors(profiles, dnaLines):
@@ -471,10 +487,13 @@ def getAncestors(profiles, dnaLines):
                     ancestor['Line'] = None
                     ancestor['Line2'] = None
 
-                ancestor['DNA'] = getProfileDNA(ancestor)
+                if isGood(ancestor):
+                    ancestor['DNA'] = getProfileDNA(ancestor)
+                else:
+                    ancestor['DNA'] = (0,0,None,None)
                 ancestors[ancestorId] = ancestor
 
-            logr(str(n))
+            logr(str(n)+"  "+str(len(ancestors)))
 
     ancestorArr = []
     for (id, ancestor) in ancestors.iteritems():
@@ -574,14 +593,7 @@ def printAncestors(profiles):
     n = 0
     for profile in profiles:
 
-        # criteria: must have dna, be assign to a line or be in the study
-
-        has_dna = int(profile['DNA'][1]) > 0
-        good = profile['Gen'] >= args.min_gen \
-               or (profile['Gen'] >= args.min_gen_dna and has_dna) \
-               or (profile['Gen'] >= args.min_gen_dna_exact_name and has_dna and profile['Last Name at Birth'] == exactSurname) \
-               or profile['Line'] != None \
-               or profile['User ID'] in studyIds
+        good = isGood(profile)
         if not good:
             continue
 
