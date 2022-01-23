@@ -42,6 +42,10 @@ cli_parser.add_argument('--min-gen-dna-exact-name', metavar='GEN',
                         type=int, default=1,
                         help='Minimum tree depth to include in output when have DNA and exact surname')
 
+cli_parser.add_argument('--last-update-file', metavar='PATH',
+                        type=str, default='',
+                        help='Last update file to compare against')
+
 cli_parser.add_argument('--test', action='store_true',
                         help='just load partial data for quick test')
 
@@ -125,6 +129,9 @@ def getProfileDNA(profile):
 
     url = 'https://www.wikitree.com/wiki/' + wikitreeId
     contents = getWebPage(url)
+
+    editedByMe = "Waggoner-1719" in getBetween(contents, '<span class=\'HISTORY-ITEM\'>', '</span>')
+
     try:
         start = '<ul class="y">'
         end = '</ul>'
@@ -154,12 +161,12 @@ def getProfileDNA(profile):
 
     from datetime import datetime
     curDate = datetime.today().strftime('%Y-%m-%d')
-    stats = (y_dna_cnt, au_dna_cnt, au_dna_best_pct, au_has_gedmatch, curDate)
+    stats = (y_dna_cnt, au_dna_cnt, au_dna_best_pct, au_has_gedmatch, curDate, editedByMe)
     cacheProfileDNA[wikitreeId] = stats
     return stats
 
 
-cacheProfileDNAPath = 'tmp/cacheProfileDNA.txt'
+cacheProfileDNAPath = './cache/profileDNA.txt'
 
 
 def loadCacheProfileDNA():
@@ -168,10 +175,12 @@ def loadCacheProfileDNA():
         for line in open(cacheProfileDNAPath):
             tokens = line.strip().split('|')
             cacheProfileDNA[tokens[0]] = (tokens[1], tokens[2],
-                    tokens[3], tokens[4], tokens[5])
+                    tokens[3], tokens[4], tokens[5], tokens[6])
+
     except Exception, e:
         print 'Failed to load: {file} ({e})'.format(file=cacheProfileDNAPath,
                 e=e)
+    log(" {cnt} cached profiles loaded".format(cnt=len(cacheProfileDNA)))
 
 
 loadCacheProfileDNA()
@@ -182,8 +191,8 @@ def saveCacheProfileDNA():
         trys=cacheTrys, hits=cacheHits))
     f = open(cacheProfileDNAPath, 'w')
     for (id, t) in sorted(cacheProfileDNA.iteritems()):
-        f.write('{id}|{t0}|{t1}|{t2}|{t3}|{t4}\n'.format(id=id, t0=t[0],
-                t1=t[1], t2=t[2], t3=t[3], t4=t[4]))
+        f.write('{id}|{t0}|{t1}|{t2}|{t3}|{t4}|{t5}\n'.format(id=id, t0=t[0],
+                t1=t[1], t2=t[2], t3=t[3], t4=t[4], t5=t[5]))
     f.close()
 
 
@@ -295,6 +304,9 @@ def getDnaLines(profiles):
     dnaTabName = 'Space:{surname}_Name_Study_-_DNA'.format(surname=studySurname)
 
     dnaTab = getWebPage('https://www.wikitree.com/wiki/{dnaTabName}'.format(dnaTabName=dnaTabName))
+
+
+
     start = '<th> Lineage'
     end = '</table>'
     start2 = '<a name="Other_Lineages_without_DNA'
@@ -357,7 +369,6 @@ def findDnaLine(wikitreeId, profiles, dnaLines):
 def getPeople():
 
     partialSurName = commonSubstring(args.surnames)
-    log(' partialSurName = ' + partialSurName)
 
     i = 0
     profiles = {}
@@ -367,6 +378,7 @@ def getPeople():
             logr(str(i) + "  " + str(len(profiles)))
 
         if i == 1:
+            log(' partialSurName = ' + partialSurName)
             tokens = line.strip().split('\t')
             fields = tokens
         else:
@@ -379,7 +391,7 @@ def getPeople():
                 if lastName in args.surnames:
                     wikitreeId = row['WikiTree ID']
                     profiles[wikitreeId] = row
-        if args.test:
+        if args.test and len(profiles) > 100:
             break
     log(' found {cnt} profiles matching surnames'.format(cnt=len(profiles)))
     return profiles
@@ -490,7 +502,7 @@ def getAncestors(profiles, dnaLines):
                 if isGood(ancestor):
                     ancestor['DNA'] = getProfileDNA(ancestor)
                 else:
-                    ancestor['DNA'] = (0,0,None,None)
+                    ancestor['DNA'] = (0,0,None,None,'','')
                 ancestors[ancestorId] = ancestor
 
             logr(str(n)+"  "+str(len(ancestors)))
@@ -558,7 +570,10 @@ def getAbbreviatedLocation(location):
         ('Michigan', 'Michigan'),
         ('Romania', 'Romania'),
         ('Iowa', 'Iowa'),
+        ('California', 'California'),
+        ('Arizona', 'Arizona'),
         ('Hungary', 'Hungary'),
+        ('Czechoslovakia', 'Czechoslovakia'),
         ('NY', 'NY'),
         ('New York', 'NY'),
         ]
@@ -571,24 +586,31 @@ def getAbbreviatedLocation(location):
     return location
 
 
-def printAncestors(profiles):
+def printAncestors(profiles, previousDescendents, lastUpdate):
 
     log('printAncestors...')
+
 
     from datetime import datetime
     print "''Auto-generated: {time}''".format(time=datetime.today().strftime('%Y-%m-%d'))
 
+    changeHeader = ""
+    if lastUpdate!="":
+        changeHeader = "! Chg<ref>change in descendents since {lastUpdate}</ref>".format(lastUpdate=lastUpdate)
+
+
     print """
-{| border="2" align="center" cellpadding=5 class="wikitable sortable"
+{{| border="2" align="center" cellpadding=5 class="wikitable sortable"
 |-
 ! Rank
 ! Gen<ref>generations deep</ref>
 ! Size<ref>count of descendents with Wagner surname</ref>
+{changeHeader}
 ! Most Distant Known Ancestor
 ! colspan=2 | Lineage<ref>from [[Space:Wagner Name Study - DNA|DNA page]]</ref>
 ! DNA Notes
 |-
-"""
+""".format(changeHeader=changeHeader)
 
     n = 0
     for profile in profiles:
@@ -601,6 +623,8 @@ def printAncestors(profiles):
         label = getProfileLabel(profile)
 
         ancestor = '[[{wikitreeId}|{label}]]'.format(wikitreeId=profile['WikiTree ID'], label=label.strip())
+
+        dna = profile['DNA']
 
         if profile['Line']:
             if profile['WikiTree ID'] != profile['Line']['WikitreeId']:
@@ -626,12 +650,15 @@ def printAncestors(profiles):
             color = extra + 'bgcolor=' + profile['Line']['Color'] + ' | '
         else:
 
-            lineage = ''
-            color = 'colspan=2 |'
+            if dna[5] == 'True':
+               color = ' colspan=2 bgcolor=WhiteSmoke |'
+               lineage = 'Recent Edit'
+            else:
+               color = ' colspan=2 | '
+               lineage = ''
             lineage2 = ''
             color2 = ''
 
-        dna = profile['DNA']
 
         dna_text = ''
         if int(dna[0]) > 0:
@@ -643,10 +670,18 @@ def printAncestors(profiles):
         if str(dna[3]) == 'True':
             dna_text = dna_text + ', GEDMatch'
 
+        change = ""
+        if args.last_update_file != "":
+            if profile['WikiTree ID'] in previousDescendents:
+                change = "| {0:+d}".format(profile['Descendents'] - previousDescendents[profile['WikiTree ID']])
+            else:
+                change = "|"
+
         print """
 | #{rank}
 | {gen}
 | {descendents}
+{change}
 | {ancestor}
 | {color} {lineage} {color2} {lineage2}
 | {dna}
@@ -654,6 +689,7 @@ def printAncestors(profiles):
             rank=n,
             gen=profile['Gen'],
             descendents=profile['Descendents'],
+            change=change,
             ancestor=ancestor,
             color=color,
             lineage=lineage,
@@ -667,7 +703,33 @@ def printAncestors(profiles):
     log(" wrote {n} lineages".format(n=n))
 
 
+def getPreviousDescendents():
+    previousDescendents = {}
+    lastUpdate = ""
+    if len(args.last_update_file):
+        lastUpdate = args.last_update_file.split('-',1)[1].split('.')[0]
+        log("Reading " + args.last_update_file)
+        n = 0
+        for rawline in open(args.last_update_file):
+            line = rawline.strip()
+
+            if line[:1] == "|":
+                if line == "|-":
+                    n = 0
+                if n == 3:
+                    descendentCnt = int(line.split('|')[1])
+                if n == 5:
+                    wtId = getBetween(line,"[[", "|")
+                    previousDescendents[wtId] = descendentCnt
+                n = n + 1
+
+        log(" found {cnt} previous descendents for {lastUpdate}".format(cnt=len(previousDescendents),lastUpdate=lastUpdate))
+    return (previousDescendents,lastUpdate)
+
+
 def main():
+    (previousDescendents, lastUpdate) = getPreviousDescendents()
+
     people = getPeople()
     updateEarliestAncestors(people)
     updateChildren(people)
@@ -675,7 +737,7 @@ def main():
     dnaLines = getDnaLines(people)
     ancestors = getAncestors(people, dnaLines)
 
-    printAncestors(ancestors)
+    printAncestors(ancestors,previousDescendents, lastUpdate)
 
     saveCacheProfileDNA()
 
