@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
 import sys
@@ -6,6 +6,7 @@ import time
 import os
 import argparse
 import gzip
+
 
 cli_parser = argparse.ArgumentParser(description='Get wikitree lineages from database dumps')
 
@@ -421,6 +422,15 @@ def updateChildren(profiles):
                 father['Children'] = [childId]
 
 
+def isRecentEmigrant(profile):
+    birth_year = (profile['Birth Date'])[:4]
+    birth_location = getAbbreviatedLocation(profile['Birth Location'])
+    death_location = getAbbreviatedLocation(profile['Death Location'])
+    birth_foreign = birth_location in ['Ger','France','Russia','England','Prussia','Austria']
+    death_in_states = (len(death_location) == 2 and death_location.isupper()) or death_location in ['Iowa']
+    return birth_foreign and death_in_states and int(birth_year) > 1800
+
+
 def getProfileLabel(profile):
     birth_year = (profile['Birth Date'])[:4]
     death_year = (profile['Death Date'])[:4]
@@ -456,13 +466,18 @@ def getProfileLabel(profile):
     return label
 
 
-def isGood(profile):
-
-    # criteria: must have dna, be assign to a line or be in the study
+def hasDna(profile, default):
     try:
         has_dna = int(profile['DNA'][1]) > 0
     except:
-        has_dna = True   # if don't know, assume you have it
+        has_dna = default
+    return has_dna
+
+def isGood(profile):
+
+    # criteria: must have dna, be assign to a line or be in the study
+    # if don't know, assume you have it
+    has_dna = hasDna(profile, True)
 
     good = profile['Gen'] >= args.min_gen \
             or (profile['Gen'] >= args.min_gen_dna and has_dna) \
@@ -586,6 +601,63 @@ def getAbbreviatedLocation(location):
     return location
 
 
+def median(lst):
+    n = len(lst)
+    s = sorted(lst)
+    return (s[n//2-1]/2.0+s[n//2]/2.0, s[n//2])[n % 2] if n else None
+
+
+def sum(lst):
+    ttl = 0
+    for x in lst:
+        ttl = ttl + x
+    return ttl
+
+def mean(lst):
+    return sum(lst) / len(lst)
+
+def getTouched(profile):
+    return (not hasDna(profile,False), profile['Touched'])
+
+def printStatistics(profiles):
+
+    descendent_cnts = []
+    good_descendent_cnts = []
+    prospects = []
+
+    for profile in profiles:
+        descendent_cnts.append( profile['Descendents'] )
+        birth_year = (profile['Birth Date'])[:4]
+        if int(birth_year)< 1950 and len(profile['First Name']) > 2:
+            good_descendent_cnts.append( profile['Descendents'] )
+            if int(birth_year) > 1830 and profile['Last Name at Birth'] == 'Waggoner':
+                prospects.append( profile )
+
+
+    prospects.sort(key=getTouched)
+    for i in range(80):
+        log("Prospect{n} = {p}  {l} {t} {dna}".format(n=i, p=getProfileLabel(prospects[i]),l=prospects[i]['WikiTree ID'],t=prospects[i]['Touched'],dna=hasDna(prospects[i],False)))
+
+    log("Total profiles:      {total_cnt}".format(total_cnt = len(descendent_cnts)))
+    log("Total good profiles: {good_cnt} ({good_pct}%)".format(good_cnt = len(good_descendent_cnts), good_pct=100*len(good_descendent_cnts)/len(descendent_cnts)))
+    log("Total prospects:     {prospect_cnt} ({prospect_pct}%)".format(prospect_cnt = len(prospects), prospect_pct=100*len(prospects)/len(descendent_cnts)))
+
+    cnt1 = len([x for x in good_descendent_cnts if x < 1])
+    cnt3 = len([x for x in good_descendent_cnts if x < 3])
+    cnt10 = len([x for x in good_descendent_cnts if x < 10])
+    log("")
+    log("To-Do:")
+    log("Lineages less then 1 people:  {cnt} ({pct}%)".format(cnt=cnt1, pct=100*cnt1/len(good_descendent_cnts)))
+    log("Lineages less then 3 people:  {cnt} ({pct}%)".format(cnt=cnt3, pct=100*cnt3/len(good_descendent_cnts)))
+    log("Lineages less then 10 people: {cnt} ({pct}%)".format(cnt=cnt10, pct=100*cnt10/len(good_descendent_cnts)))
+    log("")
+    log("Median descendents:      {m}".format(m = median(map(float,descendent_cnts))))
+    log("Median good descendents: {m}".format(m = median(map(float,good_descendent_cnts))))
+    log("")
+    log("Mean descendents:        {m}".format(m = mean(map(float,descendent_cnts))))
+    log("Mean good descendents:   {m}".format(m = mean(map(float,good_descendent_cnts))))
+
+
 def printAncestors(profiles, previousDescendents, lastUpdate):
 
     log('printAncestors...')
@@ -650,7 +722,10 @@ def printAncestors(profiles, previousDescendents, lastUpdate):
             color = extra + 'bgcolor=' + profile['Line']['Color'] + ' | '
         else:
 
-            if dna[5] == 'True':
+            if isRecentEmigrant(profile):
+               color = ' colspan=2 bgcolor=MintCream |'
+               lineage = 'Recent Emigrant'
+            elif dna[5] == 'True':
                color = ' colspan=2 bgcolor=WhiteSmoke |'
                lineage = 'Recent Edit'
             else:
@@ -673,12 +748,12 @@ def printAncestors(profiles, previousDescendents, lastUpdate):
         change = ""
         if args.last_update_file != "":
             if profile['WikiTree ID'] in previousDescendents:
-                change = "| {0:+d}".format(profile['Descendents'] - previousDescendents[profile['WikiTree ID']])
+                change = "| {0}".format(profile['Descendents'] - previousDescendents[profile['WikiTree ID']])
             else:
                 change = "|"
 
         print """
-| #{rank}
+| {rank}
 | {gen}
 | {descendents}
 {change}
@@ -741,6 +816,13 @@ def main():
 
     saveCacheProfileDNA()
 
+    printStatistics(ancestors)
+
+
+#huh = [1,5,3,9,7]
+#print sum(huh)
+#print median(huh)
+#sys.exit(2)
 
 main()
 
