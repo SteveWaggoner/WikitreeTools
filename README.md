@@ -1,6 +1,6 @@
 # WikitreeTools
 
-This python scripts is used to generate the following webpage:
+This python script is used to generate the following webpage:
 
 https://www.wikitree.com/wiki/Space:Wagner_Name_Study_-_Lineages
 
