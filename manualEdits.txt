@@ -1,0 +1,73 @@
+UncertainFather - [[Waggoner-1241|Jacob Johann (Waggoner) Wagner (abt.1717-abt.1784)]]
+UncertainFather - [[Wagner-801|Jacob Wagner Sr. (1717-1799)]]
+UncertainFather - [[Waggoner-114|Henry Waggoner I (1733-1805)]]
+
+IgnoreLineage - [[Wagner-3288|Noah Wagner (abt.1600-1665)]]
+LabelLineage - [[Wagoner-370|Johann Adam Wagoner (abt.1744-1779)]] - Adam 1744 in MD
+UncertainFather - [[Wagoner-370|Johann Adam Wagoner (abt.1744-1779)]]
+UncertainFather - [[Wagner-2566|Eva Ann (Wagner) Bloom (abt.1734-abt.1796)]]
+UncertainFather - [[Waggoner-666|Anna Elizabeth Rosina Waggoner (1740-1810)]]
+
+LabelLineage - [[Wagner-5464|Tobias Wagner (1598-1680)]] - Tobias 1598
+LabelLineage - [[Wagner-3994|Johann Adam Wagner (abt.1711-abt.1773)]] - Adam 1711 in PA
+
+UncertainFather - [[Waggoner-30|Johan Conrad (Waggoner) Wagner (1729-1799)]]
+
+IgnoreLineage - [[Wagner-11201|Unknown Wagner (bef.1605-)]]
+
+LabelLineage - [[Wagner-3026|Henry Wagner (1710-1785)]] - Henry 1710 in NC
+LabelLineage - [[Waggoner-216|Ludwig Waggoner (1710-1783)]] - Ludwig 1710 in VA
+LabelLineage - [[Waggoner-1051|Philip Waggoner (abt.1741-1782)]] - Philip 1741 in NC
+
+IgnoreLineage - [[Wagner-1581|Friederich Thomas Christian Wagner (1668-)]]
+UncertainFather - [[Wagner-1150|Christian Friederich Wagner (1723-1810)]]
+
+UncertainFather - [[Wagner-13507|Johann Phillip Peter Wagner Sr. (1687-aft.1750)]]
+
+UncertainFather - [[Waggoner-856|William Waggoner (1692-)]]
+LabelLineage - [[Waggoner-856|William Waggoner (1692-)]] - George 1730 in GA
+
+UncertainFather - [[Waggoner-1241|Jacob Johann (Waggoner) Wagner (abt.1717-abt.1784)]]
+LabelLineage - [[Waggoner-1241|Jacob Johann (Waggoner) Wagner (abt.1717-abt.1784)]] - Jans in SC
+
+UncertainFather - [[Wagner-801|Jacob Wagner Sr. (1717-1799)]]
+LabelLineage - [[Wagner-801|Jacob Wagner Sr. (1717-1799)]] - Old Jacob 1717 in NC
+
+
+IgnoreLineage - [[Wagner-8781|Werner Wagner (1547-)]]
+
+UncertainFather - [[Wagner-4316|Hans Jacob Wagner Sr (1693-1754)]]
+LabelLineage - [[Wagner-4316|Hans Jacob Wagner Sr (1693-1754)]] - Wagner+Jung
+
+IgnoreLineage - [[Wagner-2254|Andreas Wagner (1593-1653)]]
+
+IgnoreLineage - [[Wagner-14900|Johannes Wagner (abt.1625-)]]
+
+IgnoreLineage - [[Wagner-9542|Jerg Wagner (abt.1580-)]]
+
+IgnoreLineage - [[Wagner-11668|Laurentius Wagner (abt.1625-)]]
+
+IgnoreLineage - [[Wagner-2906|Hans Wagner (1475-)]]
+
+UncertainFather - [[Wagner-9060|Pearl (Wagner) Schlesinger (1887-1951)]]
+
+IgnoreLineage - [[Wagner-13674|Jörg Wagner (abt.1560-)]]
+
+IgnoreLineage - [[Wagner-1018|Old Wagner (1405-1465)]]
+
+IgnoreLineage - [[Wagner-1213|Georg David Wagner (1651-1701)]]
+UncertainFather - [[Wagner-13507|Johann Phillip Peter Wagner Sr. (1687-aft.1750)]]
+LabelLineage - [[Wagner-13507|Johann Phillip Peter Wagner Sr. (1687-aft.1750)]] - Peter in NY
+
+IgnoreLineage - [[Wagner-5030|Johannes Hansen Wagner (bef.1615-)]]
+UncertainFather - [[Waggoner-1064|Martin Waggoner (1702-1740)]]
+LabelLineage - [[Waggoner-1064|Martin Waggoner (1702-1740)]] - Hans Jacob the Patriot
+
+LabelLineage - [[Waggoner-2546|Jans Waggoner (abt.1720-1786)]] - Jans in SC
+
+LabelLineage - [[Wagner-8326|Johannes Wagner (abt.1620-abt.1680)]] - Phillip in Brasil
+
+IgnoreLineage - [[Wagner-12404|Unknown Wagner (abt.1830-abt.1880)]]
+UncertainFather - [[Wagner-4154|Ernst Wagner (1853-1917)]]
+
+LabelLineage - [[Wagner-4522|Martin Wagner (-1715)]] - Wagner in Brasil

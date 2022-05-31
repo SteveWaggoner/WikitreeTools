@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LAST_UPDATE_FILE=Wagner_Lineages-2022-04-18.txt
+LAST_UPDATE_FILE=Wagner_Lineages-2022-05-29.txt
 DATE=`date +%Y-%m-%d`
 
 time ./get_lineages.py Wagner Wagoner Waggoner Waggener --exact 2 --last-update-file $LAST_UPDATE_FILE | sed -r '/^\s*$/d' > Wagner_Lineages-$DATE.txt
