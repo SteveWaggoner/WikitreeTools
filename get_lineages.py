@@ -565,13 +565,35 @@ class Lineage:
     def list():
         return Lineage._allLines.iteritems()
 
-    def __init__(self, color, lineName, wikiId):
+    def __init__(self, color, lineName, wikiId, inStudy):
         self.color = color
         self.lineName = lineName
         self.wikiId = wikiId
+        self.inStudy = inStudy
 
     def __repr__(self):
-        return "(color: "+self.color+", lineName="+self.lineName+", wikiId="+self.wikiId+")"
+        return "(color: "+self.color+", lineName="+self.lineName+", wikiId="+self.wikiId+", inStudy="+str(self.inStudy)+")"
+
+    @staticmethod
+    def getStudyLabel(studyId):
+
+        wikiId = Profile.getWikiId(studyId)
+        if wikiId and Profile.exists(wikiId):
+            profile = Profile.find(Profile.getWikiId(studyId))
+
+            if profile.wikiId() in Config.labelLineageWikiIds:
+                return Config.labelLineageWikiIds[profile.wikiId()]
+            father = profile.getFather()
+            if father:
+                if father.wikiId() in Config.labelLineageWikiIds:
+                    return Config.labelLineageWikiIds[father.wikiId()]
+            for child in profile.children:
+                if child.wikiId() in Config.labelLineageWikiIds:
+                    return Config.labelLineageWikiIds[child.wikiId()]
+        else:
+            Util.log("Cannot find profile for user id: "+studyId+" ???")
+
+        return 'In Study'
 
     @staticmethod
     def loadDnaLines():
@@ -584,37 +606,31 @@ class Lineage:
 
         start = '<th> Lineage'
         end = '</table>'
-        start2 = '<a name="Other_Lineages_without_DNA'
-        end2 = 'work in progress'
         for classified in Util.getBetween(dnaTab, start, end).split('<tr>'):
             color = Util.getBetween(classified, ' bgcolor="', '"')
             lineName = Util.getBetween(Util.getBetween(classified, ' bgcolor="',
                                   '/td>'), '>', '<').strip()
             wikiId = Util.getBetween(classified, '<a href="/wiki/', '"')
 
-            Lineage._allLines[wikiId] = Lineage(color, lineName, wikiId)
+            Lineage._allLines[wikiId] = Lineage(color, lineName, wikiId, False)
 
-        for unclassified in Util.getBetween(dnaTab, start2, end2).split('<tr>'):
-            wikiId = Util.getBetween(unclassified, '<a href="/wiki/', '"')
-
-            #use manualEdits for unclassified
-            lineageName = 'Unclassified'
-            if wikiId in Config.labelLineageWikiIds:
-                lineageName = Config.labelLineageWikiIds[wikiId]
-
-            Lineage._allLines[wikiId] = Lineage('WhiteSmoke', lineageName, wikiId)
-
+        n=0
         for studyId in Config.studyIds:
             wikiId = Profile.getWikiId(studyId)
+
+            n = n + 1
+            Util.log("{n} - studyId={studyId}, wikiId={wikiId}, notInLines={noIn}".format(n=n,studyId=studyId, wikiId=wikiId, noIn=wikiId not in Lineage._allLines))
+
             if wikiId not in Lineage._allLines:
-                Lineage._allLines[wikiId] = Lineage('WhiteSmoke', 'In Study', wikiId)
+                studyLabel = Lineage.getStudyLabel(studyId)
+                Lineage._allLines[wikiId] = Lineage('WhiteSmoke', studyLabel, wikiId, True)
 
 
     @staticmethod
     def findDnaLine2(profile, includeStudy, lines):
 
         wikiId = profile.wikiId()
-        if wikiId in Lineage._allLines and (includeStudy or Lineage._allLines[wikiId].lineName != 'In Study'):
+        if wikiId in Lineage._allLines and (includeStudy or not Lineage._allLines[wikiId].inStudy):
             lines.append(Lineage._allLines[wikiId])
         else:
             for child in profile.children:
@@ -631,7 +647,6 @@ class Lineage:
             Lineage.findDnaLine2(profile, True, lines)
         return lines
 
-Lineage.loadDnaLines()
 
 ####################################################
 ####################################################
@@ -701,7 +716,8 @@ def isGood(profile):
             or profile.wikiId() in Config.labelLineageWikiIds \
             or profile.wikiId() in Config.uncertainFatherWikiIds
 
-    if profile.wikiId() == 'Wagner-801':
+    #debug
+    if profile.wikiId() in('Waggener-25', 'Wagner-14473'):
         Util.log("profile = {p}, profile.dna.au_cnt={au_cnt}, has_dna={has_dna}, profile.gen={gen}, CLI.args.min_gen={min_gen}, profile.line={line}, isGood={isGood}".format(p=profile,au_cnt=profile.dna.au_cnt,has_dna=has_dna, gen=profile.gen, min_gen=CLI.args.min_gen, line=profile.line, isGood=good))
 
     return good
@@ -852,17 +868,17 @@ def printLineages(profiles):
                 color2 = ''
                 lineage2 = ''
 
-            color = extra + 'bgcolor=' + profile.line.color + ' | '
+            color = extra + 'bgcolor=' + profile.line.color + ' |'
         else:
 
             if profile.wikiId() in Config.labelLineageWikiIds:
-               color = ' colspan=2 bgcolor=WhiteSmoke |'
+               color = 'colspan=2 bgcolor=WhiteSmoke |'
                lineage = Config.labelLineageWikiIds[profile.wikiId()]
             elif profile.isRecentEmigrant():
-               color = ' colspan=2 bgcolor=WhiteSmoke |'
+               color = 'colspan=2 bgcolor=WhiteSmoke |'
                lineage = 'Recent Emigrant'
             else:
-               color = ' colspan=2 | '
+               color = 'colspan=2 |'
                lineage = ''
             lineage2 = ''
             color2 = ''
@@ -915,6 +931,7 @@ def printLineages(profiles):
 def main():
 
     loadProfiles()
+    Lineage.loadDnaLines()
     updateEarliestAncestors()
     updateChildren()
 

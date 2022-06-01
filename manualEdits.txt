@@ -9,7 +9,7 @@ UncertainFather - [[Wagner-2566|Eva Ann (Wagner) Bloom (abt.1734-abt.1796)]]
 UncertainFather - [[Waggoner-666|Anna Elizabeth Rosina Waggoner (1740-1810)]]
 
 LabelLineage - [[Wagner-5464|Tobias Wagner (1598-1680)]] - Tobias 1598
-LabelLineage - [[Wagner-3994|Johann Adam Wagner (abt.1711-abt.1773)]] - Adam 1711 in PA
+LabelLineage - [[Wagner-3994|Johann Adam Wagner (abt.1711-abt.1773)]] - Adam 1711 in Berks PA
 
 UncertainFather - [[Waggoner-30|Johan Conrad (Waggoner) Wagner (1729-1799)]]
 
@@ -71,3 +71,12 @@ IgnoreLineage - [[Wagner-12404|Unknown Wagner (abt.1830-abt.1880)]]
 UncertainFather - [[Wagner-4154|Ernst Wagner (1853-1917)]]
 
 LabelLineage - [[Wagner-4522|Martin Wagner (-1715)]] - Wagner in Brasil
+
+LabelLineage - [[Waggoner-1539|George Waggoner (abt.1680-1763)]] - Hacker Creek
+LabelLineage - [[Wagoner-1298|John Phillip Wagoner (abt.1721-abt.1787)]] - Phillip 1722 in MD
+
+UncertainFather - [[Wagoner-362|John Jacob Wagoner (1762-1837)]]
+LabelLineage - [[Wagoner-362|John Jacob Wagoner (1762-1837)]] - John Jacob 1762 in MD
+
+LabelLineage - [[Wagner-6556|Matthias Wagner (abt.1750-)]] - John Baptist 1769
+
