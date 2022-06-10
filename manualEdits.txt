@@ -80,3 +80,11 @@ LabelLineage - [[Wagoner-362|John Jacob Wagoner (1762-1837)]] - John Jacob 1762 
 
 LabelLineage - [[Wagner-6556|Matthias Wagner (abt.1750-)]] - John Baptist 1769
 
+LabelLineage - [[Wagner-644|Heinrich Wagner (bef.1700-)]] - Michael 1723 in MD
+
+LabelLineage - [[Wagner-14660|Georg Wagner (1611-1690)]] - Rottenburg
+
+LabelLineage - [[Waggoner-895|Francis Anthony Waggoner (abt.1728-abt.1798)]] - GW Lifeguard
+
+LabelLineage - [[Wagner-11562|Johann Gottfried Wagner (1809-1893)]] - Australia
+
