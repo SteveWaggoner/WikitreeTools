@@ -267,7 +267,7 @@ class ConfigLoader:
                 userIds.append(tokens[0])
 
             #for testing
-            if os.getenv("DEBUG")!=None and n>10:
+            if os.getenv("DEBUG")!=None and len(userIds)>5:
                 break
 
         Util.log(' found {cnt} profiles in study'.format(cnt=len(userIds)))
@@ -689,21 +689,21 @@ class LineageCollection:
 
     def getStudyLabel(self, studyId):
 
-        wikiId = profiles.getWikiId(studyId)
-        if wikiId and profiles.exists(wikiId):
+        wikiId = self.profiles.lookupWikiId(studyId)
+        if wikiId and self.profiles.exists(wikiId):
 
-            profile = profiles.find(wikiId)
+            profile = self.profiles.find(wikiId)
 
-            if profile.wikiId() in config.labelLineageWikiIds:
-                return config.labelLineageWikiIds[profile.wikiId()]
+            if profile.wikiId() in self.config.labelLineageWikiIds:
+                return self.config.labelLineageWikiIds[profile.wikiId()]
 
-            father = profile.getFather()
+            father = profile.father
             if father:
-                if father.wikiId() in config.labelLineageWikiIds:
-                    return config.labelLineageWikiIds[father.wikiId()]
+                if father.wikiId() in self.config.labelLineageWikiIds:
+                    return self.config.labelLineageWikiIds[father.wikiId()]
             for child in profile.children:
-                if child.wikiId() in Config.labelLineageWikiIds:
-                    return config.labelLineageWikiIds[child.wikiId()]
+                if child.wikiId() in self.config.labelLineageWikiIds:
+                    return self.config.labelLineageWikiIds[child.wikiId()]
         else:
             Util.log("Cannot find profile for user id: "+studyId+" ???")
 
@@ -730,7 +730,7 @@ class LineageCollection:
 
         n=0
         for studyId in self.config.studyIds:
-            wikiId = profiles.getWikiId(studyId)
+            wikiId = self.profiles.lookupWikiId(studyId)
 
             n = n + 1
             Util.log("{n} - studyId={studyId}, wikiId={wikiId}, notInLines={noIn}".format(n=n,studyId=studyId, wikiId=wikiId, noIn=wikiId not in self._allLines))
