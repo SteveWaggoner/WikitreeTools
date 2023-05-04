@@ -188,7 +188,7 @@ class Util:
 
 
 ####################################################
-class CLI:
+def readArgs():
 
     from datetime import datetime
     curDate = datetime.today().strftime('%Y-%m-%d')
@@ -239,8 +239,6 @@ class CLI:
                         type=int, default=1,
                         help='Minimum tree depth to include in output when have DNA and exact surname')
 
-    cli_parser.add_argument('--test', action='store_true',
-                        help='just load partial data for quick test')
 
     args = cli_parser.parse_args()
     studySurname = args.surnames[args.study]
@@ -248,16 +246,18 @@ class CLI:
 
     Util.log(args)
 
+    return (args, studySurname, exactSurname)
+
 
 ####################################################
-class Config:
+class ConfigLoader:
 
     @staticmethod
-    def getStudyIds():
-        studyName = '{surname}_Name_Study'.format(surname=CLI.studySurname)
+    def getStudyIds(date, studySurname):
+        studyName = '{surname}_Name_Study'.format(surname=studySurname)
         userIds = []
         n = 0
-        gzpath = "data_{0}/dump_categories.csv.gz".format(CLI.args.date.replace("-","_"))
+        gzpath = "data_{0}/dump_categories.csv.gz".format(date.replace("-","_"))
         for line in Util.openGz(gzpath):
             n = n + 1
             if n % 1000000 == 0:
@@ -265,18 +265,20 @@ class Config:
             tokens = line.split('\t')
             if tokens[1].strip() == studyName:
                 userIds.append(tokens[0])
-            if CLI.args.test:
+
+            #for testing
+            if os.getenv("DEBUG")!=None and n>10:
                 break
 
         Util.log(' found {cnt} profiles in study'.format(cnt=len(userIds)))
         return userIds
 
     @staticmethod
-    def getPreviousDescendents():
+    def getPreviousDescendents(last_update, studySurname):
 
         previousDescendents = {}
-        if CLI.args.last_update:
-            prev_path = CLI.studySurname+"_Lineages-{time}.txt".format(time=CLI.args.last_update)
+        if last_update:
+            prev_path = studySurname+"_Lineages-{time}.txt".format(time=last_update)
             Util.log("Reading " + prev_path)
             n = 0
             for rawline in open(prev_path):
@@ -292,9 +294,9 @@ class Config:
                         previousDescendents[wtId] = descendentCnt
                     n = n + 1
 
-            Util.log(" found {cnt} previous descendents for {lastUpdate}".format(cnt=len(previousDescendents),lastUpdate=CLI.args.last_update))
+            Util.log(" found {cnt} previous descendents for {lastUpdate}".format(cnt=len(previousDescendents),lastUpdate=last_update))
         else:
-            Util.log(" skipping previous descendents since did provide a --last-update")
+            Util.log(" skipping previous descendents since didn't provide a --last-update")
 
         return previousDescendents
 
@@ -318,99 +320,41 @@ class Config:
                     print "unknown action: "+action
         return (uncertainFatherWikiIds, ignoreLineageWikiIds, labelLineageWikiIds)
 
-Config.studyIds = Config.getStudyIds()
-(Config.uncertainFatherWikiIds,Config.ignoreLineageWikiIds,Config.labelLineageWikiIds) = Config.readManualEdits()
-
 
 
 ####################################################
 class Profile:
 
-  _allProfiles = {}
-  _userToWikiLU = {}
-
-  @staticmethod
-  def getWikiId(userId):
-    if userId in Profile._userToWikiLU:
-        return Profile._userToWikiLU[userId]
-
-  @staticmethod
-  def load(row):
-      profile = Profile(row)
-      wikiId = profile.wikiId()
-      Profile._allProfiles[wikiId] = profile
-      Profile._userToWikiLU[profile.userId()] = wikiId
-
-  @staticmethod
-  def exists(wikiId):
-      return wikiId in Profile._allProfiles
-
-  @staticmethod
-  def find(wikiId):
-      return Profile._allProfiles[wikiId]
-
-  @staticmethod
-  def list():
-      return Profile._allProfiles.iteritems()
-
-  @staticmethod
-  def count():
-      return len(Profile._allProfiles)
-
   def __init__(self, row):
-    self._row = row
-    self.ancestor = None
-    self.father = None
-    self.children = []
+        self._row = row
+        self.ancestor = None
+        self.father = None
+        self.children = []
 
-    self.line = None
-    self.line2 = None
-    self.gen = 0
-    self.descendents = 0
-    self.dna = DNA("",0,0,0,"")
+        self.line = None
+        self.line2 = None
+        self.gen = 0
+        self.descendents = 0
+        self.dna = DNA("",0,0,0,"")
 
   def __repr__(self):
-      return "{"+self.wikiId()+" "+self.getLabel()+"}"
+        return "{"+self.wikiId()+" "+self.getLabel()+"}"
 
   def wikiId(self):
-      return self._row['WikiTree ID']
+        return self._row['WikiTree ID']
 
   def userId(self):
-      return self._row['User ID']
-
-  def getFather(self):
-
-      if self.father:
-         return self.father
-
-      if self.wikiId() not in Config.uncertainFatherWikiIds:
-            wikiId =  Profile.getWikiId(self._row['Father'])
-            if wikiId != None:
-                self.father = Profile.find(wikiId)
-
-      return self.father
+        return self._row['User ID']
 
   def touched(self):
-      return self._row['Touched']
-
-  def earliestAncestor(self):
-    if self.ancestor != None:
-        return self.ancestor
-
-    ancestor = self
-    father = ancestor.getFather()
-    while father != None and not father.wikiId() in Config.uncertainFatherWikiIds:
-        ancestor = father
-        father = ancestor.getFather()
-
-    return ancestor
+        return self._row['Touched']
 
   def countDescendents(self):
 
-    cnt = len(self.children)
-    for child in self.children:
-        cnt = cnt + child.countDescendents()
-    return cnt
+        cnt = len(self.children)
+        for child in self.children:
+            cnt = cnt + child.countDescendents()
+        return cnt
 
   def countGenerations(self, depth=0):
 
@@ -488,14 +432,155 @@ class Profile:
 
 
 
+class ProfileCollection:
+
+  _allProfiles = {}
+  _userToWikiLU = {}
+
+  def __init__(self, config):
+      self.config = config
+
+  def lookupWikiId(self, userId):
+    if userId in self._userToWikiLU:
+        return self._userToWikiLU[userId]
+
+  def append(self, row):
+      profile = Profile(row)
+      wikiId = profile.wikiId()
+      self._allProfiles[wikiId] = profile
+      self._userToWikiLU[profile.userId()] = wikiId
+
+  def exists(self, wikiId):
+      return wikiId in self._allProfiles
+
+  def find(self, wikiId):
+      return self._allProfiles[wikiId]
+
+  def list(self):
+      return self._allProfiles.iteritems()
+
+  def count(self):
+      return len(self._allProfiles)
+
+
+  def lookupFather(self, profile):
+
+      if profile.wikiId() not in self.config.uncertainFatherWikiIds:
+            wikiId =  self.lookupWikiId(profile._row['Father'])
+            if wikiId != None:
+                return self.find(wikiId)
+
+  def lookupEarliestAncestor(self, profile):
+
+    ancestor = profile
+    father = self.lookupFather(ancestor)
+    while father != None and not father.wikiId() in self.config.uncertainFatherWikiIds:
+        ancestor = father
+        father = self.lookupFather(ancestor)
+
+    return ancestor
+
+
+  def load(self):
+
+    partialSurName = Util.commonSubstring(self.config.args.surnames)
+    Util.log(' partialSurName = ' + partialSurName)
+
+    i = 0
+    gzpath = "data_{0}/dump_people_users.csv.gz".format(self.config.args.date.replace("-","_"))
+    for line in Util.openGz(gzpath):
+        i = i + 1
+        if i % 1000000 == 0:
+            Util.logr(str(i) + "  " + str(self.count()))
+
+        #for testing
+        if os.getenv("DEBUG")!=None and self.count()>150:
+            break
+
+        if i == 1:
+            tokens = line.strip().split('\t')
+            fields = tokens
+        else:
+            if partialSurName in line:
+
+                tokens = line.strip().split('\t')
+                row = dict(zip(fields, tokens))
+
+                lastName = row['Last Name at Birth']
+                if lastName in self.config.args.surnames:
+                    self.append(row)
+
+    Util.log(' found {cnt} profiles matching surnames'.format(cnt=self.count()))
+
+
+  def updateEarliestAncestors(self):
+
+    Util.log('updateEarliestAncestors...')
+    n = 0
+    for (wikitreeId, profile) in self.list():
+        n = n + 1
+        if n % 100 == 0:
+            Util.logr(n)
+        profile.ancestor = self.lookupEarliestAncestor(profile)
+
+
+  def updateChildren(self):
+
+    Util.log('updateChildren...')
+    for (childId, child) in self.list():
+        father = self.lookupFather(child)
+        if father != None:
+            child.father = father
+            if childId not in self.config.uncertainFatherWikiIds:
+                father.children.append(child)
+            else:
+                Util.log("uncertain {father} is father of {child} ".format(father=father, child=child))
+
+
+  def calculateLineages(self, lineages, dnaLoader):
+
+    Util.log('findLineages...')
+
+    n = 0
+    ancestors = {}
+    for (wikiId, profile) in self.list():
+        n = n + 1
+        if profile.ancestor != None:
+
+            if profile.ancestor.father == None:
+
+                ancestor = profile.ancestor
+
+                ancestor.gen = ancestor.countGenerations()
+                ancestor.descendents = ancestor.countDescendents()
+                ancestor.dna = dnaLoader.getDNA(ancestor)
+
+                lines = lineages.findDnaLine(ancestor)
+                if len(lines) > 0:
+                    ancestor.line = lines[0]
+                    if len(lines) > 1:
+                        ancestor.line2 = lines[1]
+
+                ancestors[ancestor.wikiId()] = ancestor
+
+            Util.logr(str(n)+"  "+str(len(ancestors)))
+
+    ancestorArr = []
+    for (id, ancestor) in ancestors.iteritems():
+        ancestorArr.append(ancestor)
+
+    Util.log(' found {cnt} common ancestors'.format(cnt=len(ancestorArr)))
+
+    # sort largest descendent count first, then have dna first, then birth date ascending,
+    ancestorsSorted1 = sorted(ancestorArr, key=lambda a: (not '1' in a.getLabel(), a.birthYear(), a.getLabel()))
+    ancestorsSorted2 = sorted(ancestorsSorted1, key=lambda a: (a.descendents, a.dna.y_cnt > 0 or a.dna.au_cnt > 0), reverse=True)
+    return ancestorsSorted2
+
+
+
 
 ####################################################
 class DNA:
-
-    _cacheProfileDNAPath = './cache/profileDNA.txt'
-    _cacheProfileDNA = {}
-    _cacheTrys = 0
-    _cacheHits = 0
 
     def __init__(self, wikiId, y_cnt, au_cnt, has_gedmatch, curDate):
         self._wikiId = wikiId
@@ -504,17 +589,29 @@ class DNA:
         self.has_gedmatch = has_gedmatch
         self._curDate = curDate
 
-    @staticmethod
-    def getProfileDNA(profile):
+
+
+class DNALoader:
+
+    _cacheProfileDNAPath = './cache/profileDNA.txt'
+    _cacheProfileDNA = {}
+    _cacheTrys = 0
+    _cacheHits = 0
+
+    def __init__(self, config):
+        self.config = config
+        self.loadCache()
+
+    def getDNA(self, profile, ignore_dna_cache=False):
         wikiId = profile.wikiId()
 
-        if DNA._cacheTrys % 100 == 0 and DNA._cacheTrys > DNA._cacheHits:
-            DNA.saveCacheProfileDNA()
+        if self._cacheTrys % 100 == 0 and self._cacheTrys > self._cacheHits:
+            self.saveCache()
 
-        DNA._cacheTrys = DNA._cacheTrys + 1
-        if wikiId in DNA._cacheProfileDNA and not CLI.args.ignore_dna_cache:
-            DNA._cacheHits = DNA._cacheHits + 1
-            return DNA._cacheProfileDNA[wikiId]
+        self._cacheTrys = self._cacheTrys + 1
+        if wikiId in self._cacheProfileDNA and not ignore_dna_cache:
+            self._cacheHits = self._cacheHits + 1
+            return self._cacheProfileDNA[wikiId]
 
         url = 'https://www.wikitree.com/wiki/' + wikiId
         contents = Util.getWebPage(url)
@@ -538,44 +635,35 @@ class DNA:
             au_dna_cnt = 0
             has_gedmatch = False
 
-        dna = DNA(wikiId, y_dna_cnt, au_dna_cnt, has_gedmatch, CLI.args.date)
-        DNA._cacheProfileDNA[wikiId] = dna
+        dna = DNA(wikiId, y_dna_cnt, au_dna_cnt, has_gedmatch, self.config.args.date)
+        self._cacheProfileDNA[wikiId] = dna
         return dna
 
 
-    @staticmethod
-    def loadCacheProfileDNA():
-        Util.log('Reading ' + DNA._cacheProfileDNAPath)
+    def loadCache(self):
+        Util.log('Reading ' + self._cacheProfileDNAPath)
         try:
-            for line in open(DNA._cacheProfileDNAPath):
+            for line in open(self._cacheProfileDNAPath):
                 tokens = line.strip().split('|')
                 wikiId = tokens[0]
-                DNA._cacheProfileDNA[wikiId] = DNA(wikiId, int(tokens[1]), int(tokens[2]), tokens[3], tokens[4])
+                self._cacheProfileDNA[wikiId] = DNA(wikiId, int(tokens[1]), int(tokens[2]), tokens[3], tokens[4])
 
         except Exception, e:
-            print 'Failed to load: {file} ({e})'.format(file=DNA._cacheProfileDNAPath, e=e)
-        Util.log(" {cnt} cached profiles loaded".format(cnt=len(DNA._cacheProfileDNA)))
+            print 'Failed to load: {file} ({e})'.format(file=self._cacheProfileDNAPath, e=e)
+        Util.log(" {cnt} cached profiles loaded".format(cnt=len(self._cacheProfileDNA)))
 
 
-    @staticmethod
-    def saveCacheProfileDNA():
-        Util.log('Writing {file} (trys={trys}, hits={hits})'.format(file=DNA._cacheProfileDNAPath, trys=DNA._cacheTrys, hits=DNA._cacheHits))
-        f = open(DNA._cacheProfileDNAPath, 'w')
-        for (id, dna) in sorted(DNA._cacheProfileDNA.iteritems()):
+    def saveCache(self):
+        Util.log('Writing {file} (trys={trys}, hits={hits})'.format(file=self._cacheProfileDNAPath, trys=self._cacheTrys, hits=self._cacheHits))
+        f = open(self._cacheProfileDNAPath, 'w')
+        for (id, dna) in sorted(self._cacheProfileDNA.iteritems()):
             f.write('{id}|{t1}|{t2}|{t3}|{t4}\n'.format(id=id, t1=dna.y_cnt, t2=dna.au_cnt, t3=dna.has_gedmatch, t4=dna._curDate))
         f.close()
 
 
-DNA.loadCacheProfileDNA()
 
 ####################################################
 class Lineage:
-
-    _allLines = {}
-
-    @staticmethod
-    def list():
-        return Lineage._allLines.iteritems()
 
     def __init__(self, color, lineName, wikiId, inStudy):
         self.color = color
@@ -586,33 +674,47 @@ class Lineage:
     def __repr__(self):
         return "(color: "+self.color+", lineName="+self.lineName+", wikiId="+self.wikiId+", inStudy="+str(self.inStudy)+")"
 
-    @staticmethod
-    def getStudyLabel(studyId):
 
-        wikiId = Profile.getWikiId(studyId)
-        if wikiId and Profile.exists(wikiId):
-            profile = Profile.find(Profile.getWikiId(studyId))
 
-            if profile.wikiId() in Config.labelLineageWikiIds:
-                return Config.labelLineageWikiIds[profile.wikiId()]
+class LineageCollection:
+
+    _allLines = {}
+
+    def __init__(self, config, profiles):
+        self.config   = config
+        self.profiles = profiles
+
+    def list(self):
+        return self._allLines.iteritems()
+
+    def getStudyLabel(self, studyId):
+
+        wikiId = profiles.getWikiId(studyId)
+        if wikiId and profiles.exists(wikiId):
+
+            profile = profiles.find(wikiId)
+
+            if profile.wikiId() in config.labelLineageWikiIds:
+                return config.labelLineageWikiIds[profile.wikiId()]
+
             father = profile.getFather()
             if father:
-                if father.wikiId() in Config.labelLineageWikiIds:
-                    return Config.labelLineageWikiIds[father.wikiId()]
+                if father.wikiId() in config.labelLineageWikiIds:
+                    return config.labelLineageWikiIds[father.wikiId()]
             for child in profile.children:
                 if child.wikiId() in Config.labelLineageWikiIds:
-                    return Config.labelLineageWikiIds[child.wikiId()]
+                    return config.labelLineageWikiIds[child.wikiId()]
         else:
             Util.log("Cannot find profile for user id: "+studyId+" ???")
 
         return 'In Study'
 
-    @staticmethod
-    def loadDnaLines():
+
+    def load(self):
 
         Util.log('getDnaLines...')
 
-        dnaTabName = 'Space:{surname}_Name_Study_-_DNA'.format(surname=CLI.studySurname)
+        dnaTabName = 'Space:{surname}_Name_Study_-_DNA'.format(surname=self.config.studySurname)
 
         dnaTab = Util.getWebPage('https://www.wikitree.com/wiki/{dnaTabName}'.format(dnaTabName=dnaTabName))
 
@@ -624,182 +726,89 @@ class Lineage:
                                   '/td>'), '>', '<').strip()
             wikiId = Util.getBetween(classified, '<a href="/wiki/', '"')
 
-            Lineage._allLines[wikiId] = Lineage(color, lineName, wikiId, False)
+            self._allLines[wikiId] = Lineage(color, lineName, wikiId, False)
 
         n=0
-        for studyId in Config.studyIds:
-            wikiId = Profile.getWikiId(studyId)
+        for studyId in self.config.studyIds:
+            wikiId = profiles.getWikiId(studyId)
 
             n = n + 1
-            Util.log("{n} - studyId={studyId}, wikiId={wikiId}, notInLines={noIn}".format(n=n,studyId=studyId, wikiId=wikiId, noIn=wikiId not in Lineage._allLines))
+            Util.log("{n} - studyId={studyId}, wikiId={wikiId}, notInLines={noIn}".format(n=n,studyId=studyId, wikiId=wikiId, noIn=wikiId not in self._allLines))
 
-            if wikiId not in Lineage._allLines:
-                studyLabel = Lineage.getStudyLabel(studyId)
-                Lineage._allLines[wikiId] = Lineage('WhiteSmoke', studyLabel, wikiId, True)
+            if wikiId not in self._allLines:
+                studyLabel = self.getStudyLabel(studyId)
+                self._allLines[wikiId] = Lineage('WhiteSmoke', studyLabel, wikiId, True)
 
 
-    @staticmethod
-    def findDnaLine2(profile, includeStudy, lines):
+    def findDnaLine2(self, profile, includeStudy, lines):
 
         wikiId = profile.wikiId()
-        if wikiId in Lineage._allLines and (includeStudy or not Lineage._allLines[wikiId].inStudy):
-            lines.append(Lineage._allLines[wikiId])
+        if wikiId in self._allLines and (includeStudy or not self._allLines[wikiId].inStudy):
+            lines.append(self._allLines[wikiId])
         else:
             for child in profile.children:
-                Lineage.findDnaLine2(child, includeStudy, lines)
+                self.findDnaLine2(child, includeStudy, lines)
 
 
-    # prioritize dna lines over just in study
-
-    @staticmethod
-    def findDnaLine(profile):
+    def findDnaLine(self, profile):
         lines = []
-        Lineage.findDnaLine2(profile, False, lines)
+        self.findDnaLine2(profile, False, lines)
         if len(lines) == 0:
-            Lineage.findDnaLine2(profile, True, lines)
+            self.findDnaLine2(profile, True, lines)
         return lines
 
 
 ####################################################
 ####################################################
 
-def loadProfiles():
-
-    partialSurName = Util.commonSubstring(CLI.args.surnames)
-    Util.log(' partialSurName = ' + partialSurName)
-
-    i = 0
-    gzpath = "data_{0}/dump_people_users.csv.gz".format(CLI.args.date.replace("-","_"))
-    for line in Util.openGz(gzpath):
-        i = i + 1
-        if i % 1000000 == 0:
-            Util.logr(str(i) + "  " + str(Profile.count()))
-
-        if i == 1:
-            tokens = line.strip().split('\t')
-            fields = tokens
-        else:
-            if partialSurName in line:
-
-                tokens = line.strip().split('\t')
-                row = dict(zip(fields, tokens))
-
-                lastName = row['Last Name at Birth']
-                if lastName in CLI.args.surnames:
-                    Profile.load(row)
-
-        if CLI.args.test and Profile.count() > 1000:
-            break
-    Util.log(' found {cnt} profiles matching surnames'.format(cnt=Profile.count()))
-
-
-def updateEarliestAncestors():
-
-    Util.log('updateEarliestAncestors...')
-    n = 0
-    for (wikitreeId, profile) in Profile.list():
-        n = n + 1
-        if n % 100 == 0:
-            Util.logr(n)
-        profile.ancestor = profile.earliestAncestor()
-
-
-def updateChildren():
-
-    Util.log('updateChildren...')
-    for (childId, child) in Profile.list():
-        father = child.getFather()
-        if father != None:
-            if childId not in Config.uncertainFatherWikiIds:
-                father.children.append(child)
-            else:
-                Util.log("uncertain {father} is father of {child} ".format(father=father, child=child))
-
-
-def isGood(profile):
+def isGoodLineage(config, profile):
 
     # criteria: must have dna, be assign to a line or be in the study or have manual edits
     has_dna = profile.dna.au_cnt > 0
 
-    good = profile.gen >= CLI.args.min_gen \
-            or (profile.gen >= CLI.args.min_gen_dna and has_dna) \
-            or (profile.gen >= CLI.args.min_gen_dna_exact_name and has_dna and profile.lastNameAtBirth() == exactSurname) \
+    good = profile.gen >= config.args.min_gen \
+            or (profile.gen >= config.args.min_gen_dna and has_dna) \
+            or (profile.gen >= config.args.min_gen_dna_exact_name and has_dna and profile.lastNameAtBirth() == config.exactSurname) \
             or profile.line != None \
-            or profile.userId() in Config.studyIds \
-            or profile.wikiId() in Config.labelLineageWikiIds \
-            or profile.wikiId() in Config.uncertainFatherWikiIds
-
-    #debug
-    if profile.wikiId() in('Waggener-25', 'Wagner-14473'):
-        Util.log("profile = {p}, profile.dna.au_cnt={au_cnt}, has_dna={has_dna}, profile.gen={gen}, CLI.args.min_gen={min_gen}, profile.line={line}, isGood={isGood}".format(p=profile,au_cnt=profile.dna.au_cnt,has_dna=has_dna, gen=profile.gen, min_gen=CLI.args.min_gen, line=profile.line, isGood=good))
+            or profile.userId() in config.studyIds \
+            or profile.wikiId() in config.labelLineageWikiIds \
+            or profile.wikiId() in config.uncertainFatherWikiIds
 
     return good
 
 
-def findLineages():
-
-    Util.log('findLineages...')
-
-    n = 0
-    ancestors = {}
-    for (wikiId, profile) in Profile.list():
-        n = n + 1
-        if profile.ancestor != None:
-
-            if profile.ancestor.getFather() == None:
-
-                ancestor = profile.ancestor
-
-                ancestor.gen = ancestor.countGenerations()
-                ancestor.descendents = ancestor.countDescendents()
-                ancestor.dna = DNA.getProfileDNA(ancestor)
-
-                lines = Lineage.findDnaLine(ancestor)
-                if len(lines) > 0:
-                    ancestor.line = lines[0]
-                    if len(lines) > 1:
-                        ancestor.line2 = lines[1]
-
-                ancestors[ancestor.wikiId()] = ancestor
-
-            Util.logr(str(n)+"  "+str(len(ancestors)))
-
-    ancestorArr = []
-    for (id, ancestor) in ancestors.iteritems():
-        ancestorArr.append(ancestor)
-
-    Util.log(' found {cnt} common ancestors'.format(cnt=len(ancestorArr)))
-
-    # sort largest descendent count first, then have dna first, then birth date ascending,
-    ancestorsSorted1 = sorted(ancestorArr, key=lambda a: (not '1' in a.getLabel(), a.birthYear(), a.getLabel()))
-    ancestorsSorted2 = sorted(ancestorsSorted1, key=lambda a: (a.descendents, a.dna.y_cnt > 0 or a.dna.au_cnt > 0), reverse=True)
-    return ancestorsSorted2
-
-
-def getTouched(profile):
+def prospectSortOrder(profile):
     return (profile.dna.au_cnt > 0, profile.touched())
 
 
 
-np = 0
-def writeAllProfile(records, wikiId, children):
-    global np
-    for child in children:
-        np = np + 1
-        records.write("{wikiId}|{descendent}|{np}\n".format(wikiId=wikiId, descendent=child.wikiId(), np=np))
-    for child in children:
-        writeAllProfile(records, wikiId, child.children)
+####################################################
+class History:
+
+  def __init__(self, config, profiles):
+      self.config = config
+      self.np = 0
+      self.newprofs = {}
+      self.oldprofs = {}
+      self.updateAllProfiles(profiles)
 
 
-def writeAllProfiles(path, profiles):
+  def writeAllProfile(self, records, wikiId, children):
+    for child in children:
+        self.np = self.np + 1
+        records.write("{wikiId}|{descendent}|{np}\n".format(wikiId=wikiId, descendent=child.wikiId(), np=self.np))
+    for child in children:
+        self.writeAllProfile(records, wikiId, child.children)
+
+  def writeAllProfiles(self, path, profiles):
     records = open(path,"w")
     for p in profiles:
-        writeAllProfile(records, p.wikiId(), p.children)
+        self.writeAllProfile(records, p.wikiId(), p.children)
     records.close()
-    return readAllProfiles(path)
+    return self.readAllProfiles(path)
 
 
-def readAllProfiles(path):
+  def readAllProfiles(self, path):
     ret = {}
     for line in open(path):
         tok = line.strip().split("|")
@@ -811,20 +820,43 @@ def readAllProfiles(path):
         ret[anc][dec] = n
     return ret
 
-newprofs = {}
-oldprofs = {}
-
-def updateAllProfiles(profiles):
-    global newprofs
-    global oldprofs
-    newpath = CLI.studySurname+"_AllProfiles-{time}.txt".format(time=CLI.args.date)
-    newprofs = writeAllProfiles(newpath, profiles)
-    if CLI.args.last_update:
-        oldpath = CLI.studySurname+"_AllProfiles-{time}.txt".format(time=CLI.args.last_update)
-        oldprofs = readAllProfiles(oldpath)
+  def updateAllProfiles(self, profiles):
+    newpath = self.config.studySurname+"_AllProfiles-{time}.txt".format(time=self.config.args.date)
+    self.newprofs = self.writeAllProfiles(newpath, profiles)
+    if self.config.args.last_update:
+        oldpath = self.config.studySurname+"_AllProfiles-{time}.txt".format(time=self.config.args.last_update)
+        self.oldprofs = self.readAllProfiles(oldpath)
 
 
-def printStatistics(profiles):
+  def whatChanged(self, profile):
+
+    # if we have the ancestor is previous update and now have more descendents
+    change = ""
+    if profile.wikiId in self.config.previousDescendents:
+        whatchangedId = None
+        if profile.descendents > self.config.previousDescendents[ancestorId]:
+
+            new_decs = newprofs[pId]
+            for new_dec_id in new_decs:
+                if new_dec_id not in oldprofs[pId]:
+                    if whatchangedId == None or new_decs[new_dec_id] < new_decs[whatchangedId]:
+                        whatchangedId = new_dec_id
+
+        if whatchangedId != None:
+            change = "[[{0}|{1}]]".format(whatchangedId, profile.descendents - previousDescendents[pId])
+        else:
+            change = "{0}".format(profile.descendents - previousDescendents[pId])
+
+    return change
+
+
+class Reporter:
+
+  def __init__(self, config):
+    self.config = config
+
+
+  def writeProspects(self, profiles):
 
     descendent_cnts = []
     good_descendent_cnts = []
@@ -834,53 +866,56 @@ def printStatistics(profiles):
     for profile in profiles:
         descendent_cnts.append( profile.descendents )
         birth_year = profile.birthYear()
-        if birth_year > 0 and birth_year < 1950 and len(profile.firstName()) > 2 and profile.lastNameAtBirth() == 'Waggoner':
+        if birth_year > 0 and birth_year < 1950 and len(profile.firstName()) > 2: # and profile.lastNameAtBirth() == self.config.exactSurname:
             good_descendent_cnts.append( profile.descendents )
             if birth_year > 1830:
                 prospects.append( profile )
 
 
-    pf = open(CLI.studySurname+"_Prospects-{time}.txt".format(time=CLI.args.date),"w")
-    prospects.sort(key=getTouched)
+    pf = open(self.config.studySurname+"_Prospects-{time}.txt".format(time=self.config.args.date),"w")
+    prospects.sort(key=prospectSortOrder)
     for i in range(250):
         if i < len(prospects):
             pf.write("Prospect{n} = {p}  {l} {t}\n".format(n=i+1, p=prospects[i].getLabel(),l=prospects[i].wikiId(),t=prospects[i].touched()))
     pf.close()
 
+    if len(good_descendent_cnts) == 0:
+        Util.log("No good descendents ?!?")
+        return
 
     Util.log("Total profiles:      {total_cnt}".format(total_cnt = len(descendent_cnts)))
     Util.log("Total good profiles: {good_cnt} ({good_pct}%)".format(good_cnt = len(good_descendent_cnts), good_pct=100*len(good_descendent_cnts)/len(descendent_cnts)))
     Util.log("Total prospects:     {prospect_cnt} ({prospect_pct}%)".format(prospect_cnt = len(prospects), prospect_pct=100*len(prospects)/len(descendent_cnts)))
 
-    cnt1 = len([x for x in good_descendent_cnts if x < 1])
-    cnt3 = len([x for x in good_descendent_cnts if x < 3])
-    cnt10 = len([x for x in good_descendent_cnts if x < 10])
+    cnt0  = len([x for x in good_descendent_cnts if x >= 0])
+    cnt1  = len([x for x in good_descendent_cnts if x >= 1])
+    cnt3  = len([x for x in good_descendent_cnts if x >= 3])
+    cnt10 = len([x for x in good_descendent_cnts if x >= 10])
     Util.log("")
     Util.log("To-Do:")
-    Util.log("Lineages less then 1 people:  {cnt} ({pct}%)".format(cnt=cnt1, pct=100*cnt1/len(good_descendent_cnts)))
-    Util.log("Lineages less then 3 people:  {cnt} ({pct}%)".format(cnt=cnt3, pct=100*cnt3/len(good_descendent_cnts)))
-    Util.log("Lineages less then 10 people: {cnt} ({pct}%)".format(cnt=cnt10, pct=100*cnt10/len(good_descendent_cnts)))
+    Util.log("Lineages greater than 0 people:  {cnt} ({pct}%)".format(cnt=cnt0,  pct=100*cnt0/len(good_descendent_cnts)))
+    Util.log("Lineages greater than 1 people:  {cnt} ({pct}%)".format(cnt=cnt1,  pct=100*cnt1/len(good_descendent_cnts)))
+    Util.log("Lineages greater than 3 people:  {cnt} ({pct}%)".format(cnt=cnt3,  pct=100*cnt3/len(good_descendent_cnts)))
+    Util.log("Lineages greater than 10 people: {cnt} ({pct}%)".format(cnt=cnt10, pct=100*cnt10/len(good_descendent_cnts)))
     Util.log("")
 
 
-def printLineages(profiles):
+  def writeLineages(self, profiles):
 
-    global newprofs
-    global oldprofs
+    history  = History(self.config, profiles)
+
     Util.log('printLineages...')
 
-    path = CLI.studySurname+"_Lineages-{time}.txt".format(time=CLI.args.date)
+    path = self.config.studySurname+"_Lineages-{time}.txt".format(time=self.config.args.date)
 
-    previousDescendents = Config.getPreviousDescendents()
-
-    Util.log("Found {0} descendents, lastUpdate={1}".format(len(previousDescendents), CLI.args.last_update))
+    Util.log("Found {0} descendents, lastUpdate={1}".format(len(self.config.previousDescendents), self.config.args.last_update))
 
     fp = open(path,"w")
-    fp.write( "''Auto-generated: {time}''\n".format(time=CLI.args.date) )
+    fp.write( "''Auto-generated: {time}''\n".format(time=self.config.args.date) )
 
     changeHeader = ""
-    if CLI.args.last_update:
-        changeHeader = "! Chg<ref>change in descendents since {lastUpdate}</ref>".format(lastUpdate=CLI.args.last_update)
+    if self.config.args.last_update:
+        changeHeader = "! Chg<ref>change in descendents since {lastUpdate}</ref>".format(lastUpdate=self.config.args.last_update)
 
 
     fp.write ( """
@@ -901,11 +936,11 @@ def printLineages(profiles):
 
         pId = profile.wikiId()
 
-        if pId in Config.ignoreLineageWikiIds:
+        if pId in self.config.ignoreLineageWikiIds:
             Util.log("Ignoring lineage "+profile.getLabel())
             continue
 
-        good = isGood(profile)
+        good = isGoodLineage(self.config, profile)
         if not good:
             continue
 
@@ -913,7 +948,7 @@ def printLineages(profiles):
         label = profile.getLabel()
 
         ancestor = '[[{wikitreeId}|{label}]]'.format(wikitreeId=pId, label=label.strip())
-        if pId in Config.uncertainFatherWikiIds:
+        if pId in self.config.uncertainFatherWikiIds:
             ancestor = ancestor + " <sup>[uncertain father]</sup>"
 
         if profile.line:
@@ -939,9 +974,9 @@ def printLineages(profiles):
             color = extra + 'bgcolor=' + profile.line.color + ' |'
         else:
 
-            if pId in Config.labelLineageWikiIds:
+            if pId in self.config.labelLineageWikiIds:
                color = 'colspan=2 bgcolor=WhiteSmoke |'
-               lineage = Config.labelLineageWikiIds[pId]
+               lineage = self.config.labelLineageWikiIds[pId]
             elif profile.isRecentEmigrant():
                color = 'colspan=2 bgcolor=WhiteSmoke |'
                lineage = 'Recent Emigrant'
@@ -962,23 +997,8 @@ def printLineages(profiles):
         if str(profile.dna.has_gedmatch) == 'True':
             dna_text = dna_text + ', GEDMatch'
 
-        change = "|"
-        if CLI.args.last_update:
+        change = "|" + history.whatChanged(profile)
 
-            # if we have the ancestor is previous update and now have more descendents
-            if pId in previousDescendents:
-                whatchangedId = None
-                if profile.descendents > previousDescendents[pId]:
-                    new_decs = newprofs[pId]
-                    for new_dec_id in new_decs:
-                        if new_dec_id not in oldprofs[pId]:
-                            if whatchangedId == None or new_decs[new_dec_id] < new_decs[whatchangedId]:
-                                whatchangedId = new_dec_id
-
-                if whatchangedId != None:
-                    change = "| [[{0}|{1}]]".format(whatchangedId, profile.descendents - previousDescendents[pId])
-                else:
-                    change = "| {0}".format(profile.descendents - previousDescendents[pId])
 
         fp.write ("""| {rank}
 | {gen}
@@ -1007,19 +1027,44 @@ def printLineages(profiles):
 
 
 
+class Config:
+
+    def __init__(self):
+        (self.args, self.studySurname, self.exactSurname) = readArgs()
+        self.studyIds = ConfigLoader.getStudyIds(self.args.date, self.studySurname)
+        self.previousDescendents = ConfigLoader.getPreviousDescendents(self.args.last_update, self.studySurname)
+        (self.uncertainFatherWikiIds, self.ignoreLineageWikiIds, self.labelLineageWikiIds) = ConfigLoader.readManualEdits()
+
+class App:
+
+    def __init__(self, config):
+        self.config = config
+        self.dnaLoader = DNALoader(self.config)
+        self.profiles = ProfileCollection(self.config)
+        self.lineages = LineageCollection(self.config, self.profiles)
+        self.reporter = Reporter(self.config)
+
+    def run(self):
+
+        self.profiles.load()
+        self.lineages.load()
+
+        self.profiles.updateEarliestAncestors()
+        self.profiles.updateChildren()
+
+        lineageResults = self.profiles.calculateLineages(self.lineages, self.dnaLoader)
+
+        self.reporter.writeLineages(lineageResults)
+        self.reporter.writeProspects(lineageResults)
+
+
+
 def main():
 
-    loadProfiles()
-    Lineage.loadDnaLines()
-    updateEarliestAncestors()
-    updateChildren()
+    config = Config()
+    app = App(config)
+    app.run()
 
-    lineages = findLineages()
-    updateAllProfiles(lineages)
-    printLineages(lineages)
-    printStatistics(lineages)
-
-    DNA.saveCacheProfileDNA()
 
 main()
 
