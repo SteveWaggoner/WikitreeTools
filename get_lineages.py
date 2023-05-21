@@ -777,11 +777,6 @@ def isGoodLineage(config, profile):
     return good
 
 
-def prospectSortOrder(profile):
-    return (profile.dna.au_cnt > 0, profile.touched())
-
-
-
 ####################################################
 class History:
 
@@ -866,14 +861,16 @@ class Reporter:
     for profile in profiles:
         descendent_cnts.append( profile.descendents )
         birth_year = profile.birthYear()
-        if birth_year > 0 and birth_year < 1950 and len(profile.firstName()) > 2: # and profile.lastNameAtBirth() == self.config.exactSurname:
+        if birth_year > 0 and birth_year < 1960 and len(profile.firstName()) > 2:
             good_descendent_cnts.append( profile.descendents )
-            if birth_year > 1830:
+            if birth_year > 1770 and profile.dna.au_cnt > 0 and not profile.isForeignBorn():
                 prospects.append( profile )
 
 
     pf = open(self.config.studySurname+"_Prospects-{time}.txt".format(time=self.config.args.date),"w")
-    prospects.sort(key=prospectSortOrder)
+
+    prospects.sort(key=lambda profile: (profile.dna.au_cnt > 1, profile.lastNameAtBirth()==self.config.exactSurname, profile.birthYear()), reverse=True)
+
     for i in range(250):
         if i < len(prospects):
             pf.write("Prospect{n} = {p}  {l} {t}\n".format(n=i+1, p=prospects[i].getLabel(),l=prospects[i].wikiId(),t=prospects[i].touched()))
