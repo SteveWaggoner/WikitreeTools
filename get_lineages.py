@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 import sys
@@ -116,11 +116,12 @@ class Util:
 
     @staticmethod
     def getWebPage(url):
-        import urllib2
+        import urllib.request
         try:
-            contents = urllib2.urlopen(url).read()
+            contents = urllib.request.urlopen(url).read().decode("utf8")
             return contents
         except:
+            Util.log("Failed to read web page: "+url)
             return ''
 
     @staticmethod
@@ -163,7 +164,7 @@ class Util:
         best_partial = ""
         best_cnt = 0
 
-        for partial, cnt in substring_counts.iteritems():
+        for partial, cnt in substring_counts.items():
             if cnt > best_cnt or ( cnt >= best_cnt and len(partial) > len(best_partial) ):
                 best_partial = partial
                 best_cnt = cnt
@@ -262,7 +263,7 @@ class ConfigLoader:
             n = n + 1
             if n % 1000000 == 0:
                 Util.logr(n)
-            tokens = line.split('\t')
+            tokens = line.split(b'\t')
             if tokens[1].strip() == studyName:
                 userIds.append(tokens[0])
 
@@ -317,7 +318,7 @@ class ConfigLoader:
                 elif action == "LabelLineage":
                     labelLineageWikiIds[wikiId] = Util.getLabel(tokens[1])
                 else:
-                    print "unknown action: "+action
+                    print ("unknown action: "+action)
         return (uncertainFatherWikiIds, ignoreLineageWikiIds, labelLineageWikiIds)
 
 
@@ -457,7 +458,7 @@ class ProfileCollection:
       return self._allProfiles[wikiId]
 
   def list(self):
-      return self._allProfiles.iteritems()
+      return self._allProfiles.items()
 
   def count(self):
       return len(self._allProfiles)
@@ -489,6 +490,7 @@ class ProfileCollection:
     i = 0
     gzpath = "data_{0}/dump_people_users.csv.gz".format(self.config.args.date.replace("-","_"))
     for line in Util.openGz(gzpath):
+        line2 = line.decode('utf8')
         i = i + 1
         if i % 1000000 == 0:
             Util.logr(str(i) + "  " + str(self.count()))
@@ -498,12 +500,12 @@ class ProfileCollection:
             break
 
         if i == 1:
-            tokens = line.strip().split('\t')
+            tokens = line2.strip().split('\t')
             fields = tokens
         else:
-            if partialSurName in line:
+            if partialSurName in line2:
 
-                tokens = line.strip().split('\t')
+                tokens = line2.strip().split('\t')
                 row = dict(zip(fields, tokens))
 
                 lastName = row['Last Name at Birth']
@@ -566,7 +568,7 @@ class ProfileCollection:
             Util.logr(str(n)+"  "+str(len(ancestors)))
 
     ancestorArr = []
-    for (id, ancestor) in ancestors.iteritems():
+    for (id, ancestor) in ancestors.items():
         ancestorArr.append(ancestor)
 
     Util.log(' found {cnt} common ancestors'.format(cnt=len(ancestorArr)))
@@ -648,15 +650,15 @@ class DNALoader:
                 wikiId = tokens[0]
                 self._cacheProfileDNA[wikiId] = DNA(wikiId, int(tokens[1]), int(tokens[2]), tokens[3], tokens[4])
 
-        except Exception, e:
-            print 'Failed to load: {file} ({e})'.format(file=self._cacheProfileDNAPath, e=e)
+        except Exception as e:
+            print ('Failed to load: {file} ({e})'.format(file=self._cacheProfileDNAPath, e=e))
         Util.log(" {cnt} cached profiles loaded".format(cnt=len(self._cacheProfileDNA)))
 
 
     def saveCache(self):
         Util.log('Writing {file} (trys={trys}, hits={hits})'.format(file=self._cacheProfileDNAPath, trys=self._cacheTrys, hits=self._cacheHits))
         f = open(self._cacheProfileDNAPath, 'w')
-        for (id, dna) in sorted(self._cacheProfileDNA.iteritems()):
+        for (id, dna) in sorted(self._cacheProfileDNA.items()):
             f.write('{id}|{t1}|{t2}|{t3}|{t4}\n'.format(id=id, t1=dna.y_cnt, t2=dna.au_cnt, t3=dna.has_gedmatch, t4=dna._curDate))
         f.close()
 
@@ -685,7 +687,7 @@ class LineageCollection:
         self.profiles = profiles
 
     def list(self):
-        return self._allLines.iteritems()
+        return self._allLines.items()
 
     def getStudyLabel(self, studyId):
 
@@ -827,20 +829,23 @@ class History:
 
     # if we have the ancestor is previous update and now have more descendents
     change = ""
-    if profile.wikiId in self.config.previousDescendents:
-        whatchangedId = None
-        if profile.descendents > self.config.previousDescendents[ancestorId]:
 
-            new_decs = newprofs[pId]
+    pId = profile.wikiId()
+
+    if pId in self.config.previousDescendents:
+        whatchangedId = None
+        if profile.descendents > self.config.previousDescendents[pId]:
+
+            new_decs = self.newprofs[pId]
             for new_dec_id in new_decs:
-                if new_dec_id not in oldprofs[pId]:
+                if new_dec_id not in self.oldprofs[pId]:
                     if whatchangedId == None or new_decs[new_dec_id] < new_decs[whatchangedId]:
                         whatchangedId = new_dec_id
 
         if whatchangedId != None:
-            change = "[[{0}|{1}]]".format(whatchangedId, profile.descendents - previousDescendents[pId])
+            change = "[[{0}|{1}]]".format(whatchangedId, profile.descendents - self.config.previousDescendents[pId])
         else:
-            change = "{0}".format(profile.descendents - previousDescendents[pId])
+            change = " {0}".format(profile.descendents - self.config.previousDescendents[pId])
 
     return change
 
