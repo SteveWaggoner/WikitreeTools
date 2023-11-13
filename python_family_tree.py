@@ -6,6 +6,7 @@ import time
 import os
 import argparse
 import gzip
+import re
 
 ####################################################
 class Util:
@@ -103,22 +104,48 @@ class Util:
         return lp.strip()
 
     @staticmethod
-    def after(txt, afterThis):
-        tokens = txt.split(afterThis,1)
+    def xxafter(txt, afterThis1, afterThis2=None):
+        tokens1 = txt.split(afterThis1,1)
+        tokens2 = txt.split(afterThis,1)
         if len(tokens)>1:
             return tokens[1]
         else:
             return ""
+
+
+    @staticmethod
+    def after(txt, afterThis):
+        tokens = re.split(afterThis, txt, maxsplit=1)
+        if len(tokens)>1:
+            return tokens[1]
+        else:
+            return ""
+
 
     @staticmethod
     def getLabel(text):
         return text.split("-")[-1].strip()
 
     @staticmethod
-    def getWebPage(url):
+    def getWebPage(url,label=None):
         import urllib.request
         try:
-            contents = urllib.request.urlopen(url).read().decode("utf8")
+            print("reading "+url)
+            if label:
+                cache_path = "cache/"+label+".webpage"
+                if os.path.isfile(cache_path):
+                    print("loading cache "+cache_path)
+                    contents = open(cache_path, 'r').read()
+                else:
+                    contents = urllib.request.urlopen(url).read().decode("utf8")
+                    print("writing cache "+cache_path)
+                    with open(cache_path, "w") as cache_fp:
+                        cache_fp.write(contents)
+
+            else:
+                contents = urllib.request.urlopen(url).read().decode("utf8")
+
+
             return contents
         except:
             Util.log("Failed to read web page: "+url)
@@ -255,14 +282,21 @@ class Person:
         self.fatherId = fatherId
         self.motherId = motherId
 
+    def birthYear(self):
+        birthYearArr = self.name.rsplit('(', 2)
+        if len(birthYearArr)==2:
+            return birthYearArr[1][0:4]
+
+
+
     def __lt__(self, other):
 
         # primary sort by birth year
-        birthYearArr = self.name.rsplit('(', 2)
-        otherBirthYearArr = other.name.rsplit('(', 2)
-        if len(birthYearArr)==2 and len(otherBirthYearArr)==2:
-            if birthYearArr[1] != otherBirthYearArr[1]:
-                return birthYearArr[1] < otherBirthYearArr[1]
+        birthYear = self.birthYear()
+        otherBirthYear = other.birthYear()
+        if birthYear and otherBirthYear:
+            if birthYear != otherBirthYear:
+                return birthYear < otherBirthYear
 
         # secondary sort by name
         return self.name < other.name
@@ -399,18 +433,119 @@ class Person:
 #Person.createIndexes()
 
 
-family = Person.getPersonByWtId("Waggoner-1922").family(int(sys.argv[1]))
+def getSections(profileText):
+
+    titles = []
+    curText = Util.after(profileText, r"<h[23]")
+    while curText:
+        title = Util.getBetween(curText[3:],">", "</span>")[:-6]
+        titles.append(title.strip())
+        curText = Util.after(curText,r"<h[2|3]")
+
+    return titles
+
+def getLinks(profileText):
+    links = {}
+    fag = Util.getBetween(profileText, "Find A Grave: <a", "</a>")
+    fs  = Util.getBetween(profileText, "FamilySearch Person: <a", "</a>")
+
+    if fag:
+        links["FindAGrave"] = Util.after(fag,"#")
+
+    if fs:
+        links["FamilySearch"] = Util.getBetween(fs,"/person/","\"")
+
+    return links
 
 
-ld=0
-n=0
-for d,o,p in family:
-    if d != ld:
-        n=0
-    ld=d
-    n = n +1
-#    print(str(d)+" "+str(n)+" "+p.name+" "+str(p.wtId))
-    print(p.name)
+def getStats(person):
+    stats = []
+    if int(person.fatherId)>0:
+        stats.append("father")
+    if int(person.motherId)>0:
+        stats.append("mother")
+    if len(person.spouses())>0:
+        stats.append("spouse")
+    if len(person.children())>0:
+        stats.append("children")
+    if len(person.siblings())>0:
+        stats.append("siblings")
+    return stats
 
+def getSize(profileText):
+    content = Util.getBetween(profileText,"This page has been accessed","Sponsored Search")
+    return int((len(content)-100)/500)
+
+
+def getProfileQuality(person):
+
+    profileText = Util.getWebPage("https://www.wikitree.com/wiki/"+person.wtId, person.wtId)
+
+    points = 0
+    probs = []
+
+    sections = getSections(profileText)
+
+    if "Biography" in sections:
+        points = points + 1
+    else:
+        probs.append("No biography")
+
+    if "Family" in sections:
+        points = points + 2
+    else:
+        probs.append("No family")
+    if "Census" in sections:
+        points = points + 1
+    else:
+        probs.append("No census")
+    if "Sources" in sections:
+        points = points + 1
+    else:
+        probs.append("No sources")
+    if "Research notes" in sections:
+        points = points + 1
+    else:
+        probs.append("No research notes")
+
+    links = getLinks(profileText)
+    if "FindAGrave" in links:
+        points = points + 1
+    else:
+        probs.append("No findagrave")
+
+    if "FamilySearch" in links:
+        points = points + 2
+    else:
+        probs.append("No familysearch")
+
+    stats = getStats(person)
+    for m in ["father","mother","siblings","spouse","children"]:
+        if m in stats:
+            points = points + 1
+        else:
+            probs.append("No "+m)
+
+    size_pnts = getSize(profileText)
+    probs.append("Size is "+str(size_pnts))
+    if size_pnts > 8:
+        size_pnts = 8
+    points = points + size_pnts
+
+    return (points, person.name, probs)
+
+
+
+family = Person.getPersonByWtId("Waggoner-1945").family(5)
+
+quality_family = []
+
+for degrees, ord, fam_person in family:
+    if fam_person.birthYear() and int(fam_person.birthYear()) < 1900:
+        points, name, probs = getProfileQuality(fam_person)
+        quality_family.append( (points + degrees, degrees, name, probs) )
+
+for fam in sorted(quality_family):
+    print(fam)
 
 
