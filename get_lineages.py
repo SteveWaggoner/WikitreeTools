@@ -139,15 +139,12 @@ class Lineage:
 
 class LineageList:
 
-    _allLines = {}
+    allLineages = {}
 
-    def __init__(self, config, profiles):
-        self.config   = config
-        self.profiles = profiles
-        self.load()
-
-    def list(self):
-        return self._allLines.items()
+    def __init__(self, config):
+        self.config = config
+        self.loadDnaLineages()
+        self.loadStudyLineages()
 
     def getStudyLabel(self, studyPerson):
 
@@ -163,12 +160,10 @@ class LineageList:
             return 'In Study'
 
 
-    def load(self):
+    def loadDnaLineages(self):
 
         dnaTabName = 'Space:{surname}_Name_Study_-_DNA'.format(surname=self.config.studySurname)
-
         dnaTab = Util.getWebPage('https://www.wikitree.com/wiki/{dnaTabName}'.format(dnaTabName=dnaTabName))
-
         start = '<th> Lineage'
         end = '</table>'
         for classified in Util.getBetween(dnaTab, start, end).split('<tr>'):
@@ -177,23 +172,23 @@ class LineageList:
                                   '/td>'), '>', '<').strip()
             wikiId = Util.getBetween(classified, '<a href="/wiki/', '"')
 
-            self._allLines[wikiId] = Lineage(color, lineName, wikiId, False)
+            self.allLineages[wikiId] = Lineage(color, lineName, wikiId, False)
 
+    def loadStudyLineages(self):
         for studyPerson in self.config.studyPersons:
-
-            if studyPerson.wtId not in self._allLines:
+            if studyPerson.wtId not in self.allLineages:
                 studyLabel = self.getStudyLabel(studyPerson)
-                self._allLines[studyPerson.wtId] = Lineage('WhiteSmoke', studyLabel, studyPerson.wtId, True)
+                self.allLineages[studyPerson.wtId] = Lineage('WhiteSmoke', studyLabel, studyPerson.wtId, True)
 
 
     def findDnaLine2(self, profile, includeStudy, lines, depth):
 
         wikiId = profile.wtId
-        if wikiId in self._allLines and (includeStudy or not self._allLines[wikiId].inStudy):
-            lines.append(self._allLines[wikiId])
+        if wikiId in self.allLineages and (includeStudy or not self.allLineages[wikiId].inStudy):
+            lines.append(self.allLineages[wikiId])
         else:
             for child in profile.children():
-                if child.lastNameAtBirth in config.args.surnames:
+                if child.lastNameAtBirth in config.args.surnames and child.wtId not in self.config.uncertainFatherWikiIds:
                     self.findDnaLine2(child, includeStudy, lines, depth + 1)
 
 
@@ -333,19 +328,18 @@ class Reporter:
     if self.config.args.last_update:
         changeHeader = "! Chg<ref>change in descendents since {lastUpdate}</ref>".format(lastUpdate=self.config.args.last_update)
 
-
     fp.write ( """
 {{| border="2" align="center" cellpadding=5 class="wikitable sortable"
 |-
 ! Rank
 ! Gen<ref>generations deep</ref>
-! Size<ref>count of descendents with Wagner surname</ref>
+! Size<ref>count of descendents with {studySurname} surname</ref>
 {changeHeader}
 ! Most Distant Known Ancestor
-! colspan=2 | Lineage<ref>from [[Space:Wagner Name Study - DNA|DNA page]]</ref>
+! colspan=2 | Lineage<ref>from [[Space:{studySurname} Name Study - DNA|DNA page]]</ref>
 ! DNA Notes
 |-
-""".format(changeHeader=changeHeader))
+""".format(changeHeader=changeHeader, studySurname=self.config.studySurname))
 
     n = 0
     for person in persons:
@@ -485,7 +479,7 @@ class Profiles:
 
     def isGoodLineagePass2(self, person):
 
-        has_dna = person.profile.dnaHasGedmatch()
+        has_dna = person.profile.dnaHasGedmatch() or person.profile.dnaYCnt() > 0
 
         good = person.gen >= config.args.min_gen \
             or len(person.descendents) >= config.args.min_descendents \
@@ -504,8 +498,7 @@ class Profiles:
 
         ea_persons1 = sorted(self.earliestAncestors.values(), key=lambda person: (-len(person.descendents), person.birthYear)) # num descendents desc, birthyear asc
 
-        lineages = LineageList(config, ea_persons1)
-
+        lineages = LineageList(config)
 
         Util.logr("Finding lineages ...")
 
@@ -518,7 +511,6 @@ class Profiles:
 
         for p in ea_persons2:
             p.profile = Profile(p)
-
 
         ea_persons3 = [p for p in ea_persons2 if self.isGoodLineagePass2(p)]
 

@@ -93,3 +93,18 @@ LabelLineage - [[Waggoner-895|Francis Anthony Waggoner (abt.1728-abt.1798)]] - G
 
 LabelLineage - [[Wagner-11562|Johann Gottfried Wagner (1809-1893)]] - Australia
 
+UncertainFather - [[Wagner-15986|Christian Carl Fredrich Wagner (1836-1899)]]
+UncertainFather - [[Wagner-15173|Gottfried Andreas Wagner (1824-1903)]]
+UncertainFather - [[Wagner-3851|Johann Georg Wagner (abt.1710-1749)]]
+UncertainFather - [[Wagoner-945|John (Wagoner) Waggoner (1761-1851)]]
+
+
+UncertainFather - [[Davidson-1946|James Davidson (abt.1725-abt.1794)]]
+
+IgnoreLineage - [[Davidson-3697|James (Davidson) Davison (abt.1631-)]]
+UncertainFather - [[Davidson-3260|John Davidson (abt.1675-1741)]]
+
+IgnoreLineage - [[Davidson-1089|John Davidson (abt.1645-1741)]]
+UncertainFather - [[Davidson-195|William Davidson (abt.1684-aft.1721)]]
+
+
