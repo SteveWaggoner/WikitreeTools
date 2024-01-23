@@ -111,14 +111,12 @@ class Util:
         return lp.strip()
 
     @staticmethod
-    def xxafter(txt, afterThis1, afterThis2=None):
-        tokens1 = txt.split(afterThis1,1)
-        tokens2 = txt.split(afterThis,1)
+    def before(txt, beforeThis):
+        tokens = re.split(beforeThis, txt, maxsplit=1)
         if len(tokens)>1:
-            return tokens[1]
+            return tokens[0]
         else:
             return ""
-
 
     @staticmethod
     def after(txt, afterThis):
@@ -142,7 +140,7 @@ class Util:
         return text.split("-")[-1].strip()
 
     @staticmethod
-    def getWebPage(url,label=None):
+    def getWebPage(url,label=None, use_cache=True):
 
         url = url.replace(" ","_")
 
@@ -152,7 +150,7 @@ class Util:
                 label = label.replace(" ","_")
 
                 cache_path = "cache/"+label+".webpage"
-                if os.path.isfile(cache_path):
+                if os.path.isfile(cache_path) and use_cache:
                     contents = open(cache_path, 'r').read()
                 else:
                     print("reading "+url)
@@ -244,14 +242,17 @@ class PersonDb:
     cursor = None
 
     def init(dataDir=Util.getLatestDataDir(),reload=False):
-        if reload:
-            os.remove("/tmp/person.db")
+        tmp_db_path = "/tmp/person_"+dataDir+".db"
 
-        PersonDb.connection = sqlite3.connect("/tmp/person.db")
+        exists = os.path.exists(tmp_db_path)
+        if reload and exists:
+            os.remove(tmp_db_path)
+
+        PersonDb.connection = sqlite3.connect(tmp_db_path)
         PersonDb.cursor = PersonDb.connection.cursor()
 
 
-        if reload:
+        if reload or not exists:
             PersonDb.createTables()
             PersonDb.readPersons(dataDir)
             PersonDb.readMarriages(dataDir)
@@ -592,7 +593,8 @@ class Profile:
 
     def __init__(self, person):
         self.person = person
-        self.profileText = Util.getWebPage("https://www.wikitree.com/wiki/"+person.wtId, person.wtId)
+        self.use_cache = os.getenv('NOCACHE', '0') == '0'
+        self.profileText = Util.getWebPage("https://www.wikitree.com/wiki/"+person.wtId, person.wtId, use_cache=self.use_cache)
 
 
     def sections(self):
@@ -620,7 +622,7 @@ class Profile:
         return links
 
 
-    def stats(self):
+    def goodParts(self):
         stats = []
         if int(self.person.fatherId)>0:
             stats.append("father")
@@ -633,6 +635,35 @@ class Profile:
         if len(self.person.siblings())>0:
             stats.append("siblings")
         return stats
+
+
+    def missingParts(self):
+
+        missing = []
+        for q in ["[place of birth?]",
+                  "[brothers or sisters?]",
+               #   "[mother?]",
+               #   "[father?]",
+                  "[spouse?]",
+                  "[children?]",
+                  "[add child]",
+                  "[add sibling]",
+                  "[marriage date?]",
+                  "[marriage location?]",
+                  "[spouse(s) unknown]",
+                  "[children unknown]",
+                  "[date unknown]",
+                  "[location unknown]",
+               #   "[father unknown]",
+               #   "[mother unknown]",
+               #   "[sibling(s) unknown]"
+                  ]:
+            if q in self.profileText:
+                missing.append(q)
+        return missing
+
+    def profileManager(self):
+        return Util.before(Util.after(Util.after(self.profileText,"Profile manager"),"profile\">"),"</a>")
 
     def size(self):
         content = Util.getBetween(self.profileText,"This page has been accessed","Sponsored Search")
@@ -713,12 +744,22 @@ class Profile:
             probs.append("Missing "+str(4 - self.person.complete())+" fields")
         points = points + self.person.complete()
 
-        stats = self.stats()
+        goodParts = self.goodParts()
         for m in ["father","mother","siblings","spouse","children"]:
-            if m in stats:
+            if m in goodParts:
                 points = points + 1
             else:
                 probs.append("No "+m)
+
+        missingParts = self.missingParts()
+        for q in missingParts:
+            points = points - 1
+            probs.append(q)
+
+        if self.profileManager() != "Steve Waggoner":
+            points = points + 6  # higher priority to fix up if you own it
+            probs.append("Owned by "+self.profileManager())
+
 
         size_pnts = self.size()
         probs.append("Size is "+str(size_pnts))

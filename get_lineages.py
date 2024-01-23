@@ -189,7 +189,8 @@ class LineageList:
         else:
             for child in profile.children():
                 if child.lastNameAtBirth in config.args.surnames and child.wtId not in self.config.uncertainFatherWikiIds:
-                    self.findDnaLine2(child, includeStudy, lines, depth + 1)
+                    if depth < 50:
+                        self.findDnaLine2(child, includeStudy, lines, depth + 1)
 
 
     def findDnaLine(self, profile):
@@ -261,14 +262,22 @@ class History:
     if pId in self.config.previousDescendents:
         whatchangedId = None
         numDescendents = len(profile.descendents)-1  # exclude yourself
-        if numDescendents > self.config.previousDescendents[pId]:
 
+        if numDescendents > self.config.previousDescendents[pId]:
             if pId in self.newprofs:
                 new_decs = self.newprofs[pId]
                 for new_dec_id in new_decs:
                     if new_dec_id not in self.oldprofs[pId]:
                         if whatchangedId == None or new_decs[new_dec_id] < new_decs[whatchangedId]:
                             whatchangedId = new_dec_id
+
+        if numDescendents < self.config.previousDescendents[pId]:
+            if pId in self.newprofs:
+                old_decs = self.oldprofs[pId]
+                for old_dec_id in old_decs:
+                    if old_dec_id not in self.newprofs[pId]:
+                        if whatchangedId == None or old_decs[old_dec_id] < old_decs[whatchangedId]:
+                            whatchangedId = old_dec_id
 
         if whatchangedId != None:
             change = "[[{0}|{1}]]".format(whatchangedId, numDescendents - self.config.previousDescendents[pId])
