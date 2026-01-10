@@ -40,7 +40,7 @@ def readArgs():
                         default=6,
                         help='Minimum tree depth to include in output')
 
-    cli_parser.add_argument('--min-descendents', metavar='GEN', type=int,
+    cli_parser.add_argument('--min-descendants', metavar='GEN', type=int,
                         default=30,
                         help='Minimum tree width to include in output')
 
@@ -62,79 +62,49 @@ class Config:
 
     def __init__(self):
         (self.args, self.studySurname, self.exactSurname) = readArgs()
-        self.studyPersons = Config.getStudyPersons(self.studySurname)
+        self.loadStudyPersons()
+        self.loadManualEdits()
+
+
+    def loadStudyPersons(self):
+        studyAreaName = '{surname}_Name_Study'.format(surname=self.studySurname)
+
+        self.studyPersons = sorted(PersonDb.getPersonsByCategory(studyAreaName), key=lambda p:p.name)
         self.studyIds = [x.id for x in self.studyPersons]
-        self.previousDescendents = Config.getPreviousDescendents(self.args.last_update, self.studySurname)
-        (self.uncertainFatherWikiIds, self.ignoreLineageWikiIds, self.labelLineageWikiIds) = Config.readManualEdits()
+
+        Util.log(' found {cnt} profiles in study'.format(cnt=len(self.studyPersons)))
 
 
-    @staticmethod
-    def getStudyPersons(studySurname):
-        studyAreaName = '{surname}_Name_Study'.format(surname=studySurname)
-        persons = sorted(PersonDb.getPersonsByCategory(studyAreaName), key=lambda p:p.name)
-
-        Util.log(' found {cnt} profiles in study'.format(cnt=len(persons)))
-        return persons
-
-    @staticmethod
-    def getPreviousDescendents(last_update, studySurname):
-
-        previousDescendents = {}
-        if last_update:
-            prev_path = studySurname+"_Lineages-{time}.txt".format(time=last_update)
-            Util.log("Reading " + prev_path)
-            n = 0
-            for rawline in open(prev_path):
-                line = rawline.strip()
-
-                if line[:1] == "|":
-                    if line == "|-":
-                        n = 0
-                    if n == 3:
-                        descendentCnt = int(line.split('|')[1])
-                    if n == 5:
-                        wtId = Util.getBetween(line,"[[", "|")
-                        previousDescendents[wtId] = descendentCnt
-                    n = n + 1
-
-            Util.log(" found {cnt} previous descendents for {lastUpdate}".format(cnt=len(previousDescendents),lastUpdate=last_update))
-        else:
-            Util.log(" skipping previous descendents since didn't provide a --last-update")
-
-        return previousDescendents
-
-    @staticmethod
-    def readManualEdits():
-        uncertainFatherWikiIds = {}
-        ignoreLineageWikiIds = {}
-        labelLineageWikiIds = {}
+    def loadManualEdits(self):
+        self.uncertainFatherWikiIds = {}
+        self.ignoreLineageWikiIds = {}
+        self.labelLineageWikiIds = {}
         for line in open("manualEdits.txt"):
             tokens = line.strip().split("-",1)
             if len(tokens) > 1:
                 action = tokens[0].strip()
-                wikiId = Util.getWikiId(tokens[1])
+                wtId = Util.getWikiId(tokens[1])
                 if action == "UncertainFather":
-                    uncertainFatherWikiIds[wikiId] = True
+                    self.uncertainFatherWikiIds[wtId] = True
                 elif action == "IgnoreLineage":
-                    ignoreLineageWikiIds[wikiId] = True
+                    self.ignoreLineageWikiIds[wtId] = True
                 elif action == "LabelLineage":
-                    labelLineageWikiIds[wikiId] = Util.getLabel(tokens[1])
+                    self.labelLineageWikiIds[wtId] = Util.getLabel(tokens[1])
                 else:
                     print ("unknown action: "+action)
-        return (uncertainFatherWikiIds, ignoreLineageWikiIds, labelLineageWikiIds)
 
 
 ####################################################
 class Lineage:
 
-    def __init__(self, color, lineName, wikiId, inStudy):
+    def __init__(self, color, lineName, wtId, inStudy):
         self.color = color
         self.lineName = lineName
-        self.wikiId = wikiId
+        self.wtId = wtId
         self.inStudy = inStudy
 
     def __repr__(self):
-        return "(color: "+self.color+", lineName="+self.lineName+", wikiId="+self.wikiId+", inStudy="+str(self.inStudy)+")"
+        return "(color: "+self.color+", lineName="+self.lineName+", wtId="+self.wtId+", inStudy="+str(self.inStudy)+")"
 
 
 class LineageList:
@@ -170,9 +140,9 @@ class LineageList:
             color = Util.getBetween(classified, ' bgcolor="', '"')
             lineName = Util.getBetween(Util.getBetween(classified, ' bgcolor="',
                                   '/td>'), '>', '<').strip()
-            wikiId = Util.getBetween(classified, '<a href="/wiki/', '"')
+            wtId = Util.getBetween(classified, '<a href="/wiki/', '"')
 
-            self.allLineages[wikiId] = Lineage(color, lineName, wikiId, False)
+            self.allLineages[wtId] = Lineage(color, lineName, wtId, False)
 
     def loadStudyLineages(self):
         for studyPerson in self.config.studyPersons:
@@ -181,174 +151,168 @@ class LineageList:
                 self.allLineages[studyPerson.wtId] = Lineage('WhiteSmoke', studyLabel, studyPerson.wtId, True)
 
 
-    def findDnaLine2(self, profile, includeStudy, lines, depth):
+    def findDnaLine2(self, person, includeStudy, lines, depth):
 
-        wikiId = profile.wtId
-        if wikiId in self.allLineages and (includeStudy or not self.allLineages[wikiId].inStudy):
-            lines.append(self.allLineages[wikiId])
+        wtId = person.wtId
+        if wtId in self.allLineages and (includeStudy or not self.allLineages[wtId].inStudy):
+            lines.append(self.allLineages[wtId])
         else:
-            for child in profile.children():
-                if child.lastNameAtBirth in config.args.surnames and child.wtId not in self.config.uncertainFatherWikiIds:
+            for child in person.children():
+                if child.lastNameAtBirth in self.config.args.surnames and child.wtId not in self.config.uncertainFatherWikiIds:
                     if depth < 50:
                         self.findDnaLine2(child, includeStudy, lines, depth + 1)
 
 
-    def findDnaLine(self, profile):
+    def findDnaLine(self, person):
 
         lines = []
-        self.findDnaLine2(profile, False, lines, 0)
+        self.findDnaLine2(person, False, lines, 0)
         if len(lines) == 0:
-            self.findDnaLine2(profile, True, lines, 0)
+            self.findDnaLine2(person, True, lines, 0)
         return lines
+
+
+    def findLinesByName(self, lineName):
+        ret = []
+        for line in self.allLineages.values():
+            if line.lineName == lineName:
+                ret.append(line.wtId)
+        return ret
 
 
 
 ####################################################
 class History:
 
-  def __init__(self, config, profiles):
+  def __init__(self, config):
       self.config = config
-      self.np = 0
-      self.newprofs = {}
-      self.oldprofs = {}
-      self.updateDescendents(profiles)
+      self.personIndex = 0
+      self.newPersons = {}
+      self.oldPersons = {}
 
+  def appendPersons(self, records, wtId, children, depth):
 
-  def appendDescendents(self, records, wikiId, children):
+    if len(children) > 0:
+        for child in children:
+            self.personIndex = self.personIndex + 1
+            records.write("{wtId}|{descendant}|{n}\n".format(wtId=wtId, descendant=child.wtId, n=self.personIndex))
+    else:
+        if depth==0:
+            self.personIndex = self.personIndex + 1
+            records.write("{wtId}||{n}\n".format(wtId=wtId, n=self.personIndex))
 
     for child in children:
-        self.np = self.np + 1
-        records.write("{wikiId}|{descendent}|{np}\n".format(wikiId=wikiId, descendent=child.wtId, np=self.np))
-    for child in children:
-        children = [c for c in child.children() if c.lastNameAtBirth in config.args.surnames]
-        self.appendDescendents(records, wikiId, children)
+        children = [c for c in child.children() if c.lastNameAtBirth in self.config.args.surnames]
+        self.appendPersons(records, wtId, children, depth+1)
 
-  def writeDescendents(self, path, profiles):
+  def writePersons(self, persons, path):
     records = open(path,"w")
-    for p in profiles:
-        children = [c for c in p.children() if c.lastNameAtBirth in config.args.surnames]
-        self.appendDescendents(records, p.wtId, children)
+    for person in persons:
+        children = [c for c in person.children() if c.lastNameAtBirth in self.config.args.surnames]
+        self.appendPersons(records, person.wtId, children, 0)
     records.close()
-    return self.readDescendents(path)
+    return self.readPersons(path)
 
 
-  def readDescendents(self, path):
-    ret = {}
+  def readPersons(self, path):
+    retPersons = {}
     for line in open(path):
         tok = line.strip().split("|")
-        anc = tok[0]
-        dec = tok[1]
-        n   = int(tok[2])
-        if anc not in ret:
-            ret[anc] = {}
-        ret[anc][dec] = n
-    return ret
+        ancestorId   = tok[0]
+        descendantId = tok[1]
+        n            = int(tok[2])
+        if ancestorId not in retPersons:
+            retPersons[ancestorId] = {}
+        retPersons[ancestorId][descendantId] = n
+    return retPersons
 
-  def updateDescendents(self, profiles):
-    newpath = self.config.studySurname+"_AllProfiles-{time}.txt".format(time=self.config.args.date)
-    self.newprofs = self.writeDescendents(newpath, profiles)
+  def loadPersons(self, persons):
+
+    newPath = self.config.studySurname+"_AllProfiles-{date}.txt".format(date=self.config.args.date)
+
+    self.writePersons(persons, newPath)
+    self.newPersons = self.readPersons(newPath)
+
     if self.config.args.last_update:
-        oldpath = self.config.studySurname+"_AllProfiles-{time}.txt".format(time=self.config.args.last_update)
-        self.oldprofs = self.readDescendents(oldpath)
+        oldPath = self.config.studySurname+"_AllProfiles-{date}.txt".format(date=self.config.args.last_update)
+        self.oldPersons = self.readPersons(oldPath)
 
 
-  def whatChanged(self, profile):
+  def whatChanged(self, person):
 
-    # if we have the ancestor is previous update and now have more descendents
+    # if we have the ancestor is previous update and now have more descendants
     change = ""
 
-    pId = profile.wtId
+    pId = person.wtId
 
-    if pId in self.config.previousDescendents:
-        whatchangedId = None
-        numDescendents = len(profile.descendents)-1  # exclude yourself
+    newDescendantList = self.newPersons[pId]
+    oldDescendantList = self.oldPersons.get(pId)
 
-        if numDescendents > self.config.previousDescendents[pId]:
-            if pId in self.newprofs:
-                new_decs = self.newprofs[pId]
-                for new_dec_id in new_decs:
-                    if new_dec_id not in self.oldprofs[pId]:
-                        if whatchangedId == None or new_decs[new_dec_id] < new_decs[whatchangedId]:
-                            whatchangedId = new_dec_id
+    if oldDescendantList:
 
-        if numDescendents < self.config.previousDescendents[pId]:
-            if pId in self.newprofs:
-                old_decs = self.oldprofs[pId]
-                for old_dec_id in old_decs:
-                    if old_dec_id not in self.newprofs[pId]:
-                        if whatchangedId == None or old_decs[old_dec_id] < old_decs[whatchangedId]:
-                            whatchangedId = old_dec_id
+        whatChangedId = None
 
-        if whatchangedId != None:
-            change = "[[{0}|{1}]]".format(whatchangedId, numDescendents - self.config.previousDescendents[pId])
+        if len(oldDescendantList) < len(newDescendantList):
+
+            # what was added
+            for newDescendantId in newDescendantList:
+                if newDescendantId not in oldDescendantList:
+                    if whatChangedId == None or newDescendantList[newDescendantId] < newDescendantList[whatChangedId]:
+                        whatChangedId = newDescendantId
+
         else:
-            change = " {0}".format(numDescendents - self.config.previousDescendents[pId])
+
+            #what was removed
+            for oldDescendantId in oldDescendantList:
+                if oldDescendantId not in newDescendantList:
+                    if whatChangedId == None or oldDescendantList[oldDescendantId] < oldDescendantList[whatChangedId]:
+                        whatChangedId = oldDescendantId
+
+
+        difCnt = len(newDescendantList) - len(oldDescendantList)
+        if difCnt == 0:
+            difCnt = ""
+        elif difCnt > 0:
+            difCnt = "+"+str(difCnt)
+        else:
+            difCnt = str(difCnt)
+
+        if whatChangedId != None:
+            change = "[[{0}|{1}]]".format(whatChangedId, difCnt)
+        else:
+            change = " {0}".format(difCnt)
 
     return change
 
 
 class Reporter:
 
-  def __init__(self, config, history):
-    self.config = config
-    self.history = history
+  def __init__(self):
 
-
-  def writeProspects(self, profiles):
-
-    descendent_cnts = []
-    good_descendent_cnts = []
-
-    prospects = []
-
-    for profile in profiles:
-        descendent_cnts.append( profile.descendents )
-
-        if len(profile.birthYear) > 2 and int(profile.birthYear) < 1960 and len(profile.firstName) > 2:
-            good_descendent_cnts.append( profile.descendents )
-            if  profile.bornAfter(1770) and profile.profile.dnaAuCnt() > 0 and not profile.isForeignBorn():
-                prospects.append( profile )
-
-
-    pf = open(self.config.studySurname+"_Prospects-{time}.txt".format(time=self.config.args.date),"w")
-
-    prospects.sort(key=lambda profile: (profile.profile.dnaAuCnt() > 1, profile.lastNameAtBirth==self.config.exactSurname, profile.birthYear), reverse=True)
-
-    for i in range(250):
-        if i < len(prospects):
-            pf.write("Prospect{n} = {p}  {l} {t}\n".format(n=i+1, p=prospects[i].name,l=prospects[i].wtId,t=prospects[i].touched))
-    pf.close()
-
-    if len(good_descendent_cnts) == 0:
-        Util.log("No good descendents ?!?")
-
+    self.config = Config()
+    self.history = History(self.config)
 
 
   def writeLineages(self, persons):
 
+    self.history.loadPersons(persons)
+
+    Util.log("Found {0} previous descendants, lastUpdate={1}".format(len(self.history.oldPersons), self.config.args.last_update))
+
     path = self.config.studySurname+"_Lineages-{time}.txt".format(time=self.config.args.date)
-
-    Util.log("Found {0} previous descendents, lastUpdate={1}".format(len(self.config.previousDescendents), self.config.args.last_update))
-
     fp = open(path,"w")
     fp.write( "''Auto-generated: {time}''\n".format(time=self.config.args.date) )
-
-    changeHeader = ""
-    if self.config.args.last_update:
-        changeHeader = "! Chg<ref>change in descendents since {lastUpdate}</ref>".format(lastUpdate=self.config.args.last_update)
 
     fp.write ( """
 {{| border="2" align="center" cellpadding=5 class="wikitable sortable"
 |-
-! Rank
-! Gen<ref>generations deep</ref>
-! Size<ref>count of descendents with {studySurname} surname</ref>
-{changeHeader}
+! No.
+! Size<ref>count of descendants with {studySurname} surname</ref>
+! Δ
 ! Most Distant Known Ancestor
-! colspan=2 | Lineage<ref>from [[Space:{studySurname} Name Study - DNA|DNA page]]</ref>
 ! DNA Notes
 |-
-""".format(changeHeader=changeHeader, studySurname=self.config.studySurname))
+""".format(studySurname=self.config.studySurname))
 
     n = 0
     for person in persons:
@@ -363,44 +327,30 @@ class Reporter:
         n = n + 1
 
         ancestor = '[[{wikitreeId}|{label}]]'.format(wikitreeId=wtId, label=label)
+        ancestor_notes = []
+        ancestor_color = ''
         if wtId in self.config.uncertainFatherWikiIds:
-            ancestor = ancestor + " <sup>[uncertain father]</sup>"
+            ancestor_notes.append('[uncertain father]')
 
 
-        if person.lines and len(person.lines) > 0:
-            if wtId != person.lines[0].wikiId:
-                lineage = '[[{link}|{label}]]'.format(link=person.lines[0].wikiId, label=person.lines[0].lineName)
+        if person.isRecentEmigrant():
+            ancestor_notes.append("Recent Emigrant")
+            ancestor_color = 'WhiteSmoke'
+
+        if wtId in self.config.labelLineageWikiIds:
+            lineage = self.config.labelLineageWikiIds[wtId]
+            ancestor_notes.append(lineage)
+            ancestor_color = 'WhiteSmoke'
+
+        for line in person.lines:
+
+            if wtId != line.wtId:
+                lineage = '[[{link}|{label}]]'.format(link=line.wtId, label=line.lineName)
             else:
-                lineage = person.lines[0].lineName
+                lineage = line.lineName
 
-            if len(person.lines)>1:
-                extra = ''
-
-                color2 = ' || bgcolor=' + person.lines[1].color + ' | '
-                if wtId != person.lines[1].wikiId:
-                    lineage2 = '[[{link}|{label}]]'.format(link=person.lines[1].wikiId, label=person.lines[1].lineName)
-                else:
-                    lineage2 = person.lines[1].lineName
-            else:
-
-                extra = 'colspan=2 '
-                color2 = ''
-                lineage2 = ''
-
-            color = extra + 'bgcolor=' + person.lines[0].color + ' |'
-        else:
-
-            if wtId in self.config.labelLineageWikiIds:
-               color = 'colspan=2 bgcolor=WhiteSmoke |'
-               lineage = self.config.labelLineageWikiIds[wtId]
-            elif person.isRecentEmigrant():
-               color = 'colspan=2 bgcolor=WhiteSmoke |'
-               lineage = 'Recent Emigrant'
-            else:
-               color = 'colspan=2 |'
-               lineage = ''
-            lineage2 = ''
-            color2 = ''
+            ancestor_notes.append(lineage)
+            ancestor_color = line.color
 
 
         dna_text = ''
@@ -413,26 +363,39 @@ class Reporter:
         if person.profile.dnaHasGedmatch() == True:
             dna_text = dna_text + ', GEDMatch'
 
-        change = "|" + self.history.whatChanged(person)
+        change = self.history.whatChanged(person)
+
+        flag_img = Util.getFlag(person.birthPlace)
+        if flag_img:
+            flag = "[[Image:"+flag_img+"|35px |"+person.birthPlace+"]]&nbsp;"
+        else:
+            flag = ""
+
+        if ancestor_color:
+            color = " bgcolor="+ancestor_color+" |"
+        else:
+            color = ""
+
+        if ancestor_notes:
+            notes = "<br><sup>" + ", ".join(ancestor_notes)+"</sup>"
+        else:
+            notes = ""
+
 
 
         fp.write ("""| {rank}
-| {gen}
-| {numDescendents}
-{change}
-| {ancestor}
-| {color} {lineage} {color2} {lineage2}
+| {numDescendants}
+| {change}
+| {color} {flag} {ancestor} {notes}
 | {dna}
 |-\n""".format(
             rank=n,
-            gen=person.gen,
-            numDescendents=len(person.descendents)-1, # exclude yourself
+            numDescendants=len(person.descendants),
             change=change,
-            ancestor=ancestor,
             color=color,
-            lineage=lineage,
-            color2=color2,
-            lineage2=lineage2,
+            flag=flag,
+            ancestor=ancestor,
+            notes=notes,
             dna=dna_text,
             ))
 
@@ -443,22 +406,27 @@ class Reporter:
 
 
 
-class Profiles:
+class PersonList:
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self):
+        self.config = Config()
         self.persons = {}
         self.load()
 
     def load(self):
         self.persons = PersonDb.getPersonsBySurnames(self.config.args.surnames)
         for pid in self.persons:
-            self.persons[pid].descendents = {}
-            self.persons[pid].descendents[pid] = self.persons[pid] #simplifies to include self as part of descendents
+            self.persons[pid].descendants = {}
+            self.persons[pid].descendants[pid] = self.persons[pid] #simplifies to include self as part of descendants
             self.persons[pid].gen = 1
 
+    def findPersonByWtId(self, wtId):
+        for pid in self.persons:
+            if self.persons[pid].wtId == wtId:
+                return self.persons[pid]
+        print("Cannot find: "+wtId)
 
-    def updateEarliestAncestors(self):
+    def calculateEarliestAncestors(self):
         self.earliestAncestors = {}
         for pid in self.persons:
             person = self.persons[pid]
@@ -470,7 +438,7 @@ class Profiles:
                 if child.wtId in self.config.uncertainFatherWikiIds:
                     break
                 father.gen = child.gen + 1
-                father.descendents.update(child.descendents)
+                father.descendants.update(child.descendants)
                 child = father
             person.earliestAncestor = child
             #
@@ -490,56 +458,77 @@ class Profiles:
 
         has_dna = person.profile.dnaHasGedmatch() or person.profile.dnaYCnt() > 0
 
-        good = person.gen >= config.args.min_gen \
-            or len(person.descendents) >= config.args.min_descendents \
-            or (person.gen >= config.args.min_gen_dna and has_dna) \
+        good = person.gen >= self.config.args.min_gen \
+            or len(person.descendants) >= self.config.args.min_descendants \
+            or (person.gen >= self.config.args.min_gen_dna and has_dna) \
             or len(person.lines) > 0 \
-            or person.id in config.studyIds \
-            or person.wtId in config.labelLineageWikiIds \
-            or person.wtId in config.uncertainFatherWikiIds
+            or person.id   in self.config.studyIds \
+            or person.wtId in self.config.labelLineageWikiIds \
+            or person.wtId in self.config.uncertainFatherWikiIds
 
         return good
 
 
-    def getLineages(self):
+    def getEarliestAncestors(self):
+
+        lineageList = LineageList(self.config)
+
+
+        Util.logr("Calculating lineages ...")
+        self.calculateEarliestAncestors()
 
         Util.logr("Reading lineages ...")
 
-        ea_persons1 = sorted(self.earliestAncestors.values(), key=lambda person: (-len(person.descendents), person.birthYear)) # num descendents desc, birthyear asc
+        ancestorList1 = self.earliestAncestors.values()
 
-        lineages = LineageList(config)
+        lineages = LineageList(self.config)
 
         Util.logr("Finding lineages ...")
 
-        for p in ea_persons1:
-            p.lines = lineages.findDnaLine(p)
+        for person in ancestorList1:
+            person.lines = lineages.findDnaLine(person)
 
-        ea_persons2 = [p for p in ea_persons1 if self.isGoodLineagePass1(p)]
+            bonus = False
+            person.maxLineageDescendantCount = len(person.descendants)
+            for lineage in person.lines:
+                if lineage.lineName != 'In Study':
+                    for relatedLineageWtId in lineageList.findLinesByName(lineage.lineName):
+                        relatedPerson = self.findPersonByWtId(relatedLineageWtId)
+                        if relatedPerson:
+                            lineageDescendantCount = len(relatedPerson.descendants)
+                            if person.maxLineageDescendantCount < lineageDescendantCount:
+                                person.maxLineageDescendantCount = lineageDescendantCount
+                            bonus = True
+                if lineage.lineName == 'Phillip in TN':
+                    print("{p} {cnt} {cnt2}".format(p=person, cnt=len(person.descendants), cnt2=person.maxLineageDescendantCount))
 
-        Util.log("Found "+str(len(ea_persons2))+" good lineages (pass1)")
+            if bonus:
+                person.maxLineageDescendantCount = person.maxLineageDescendantCount + 0.001
 
-        for p in ea_persons2:
-            p.profile = Profile(p)
+        ancestorList2 = sorted([person for person in ancestorList1 if self.isGoodLineagePass1(person)], key=lambda person: (-person.maxLineageDescendantCount, -len(person.descendants), person.birthYear))
 
-        ea_persons3 = [p for p in ea_persons2 if self.isGoodLineagePass2(p)]
+        Util.log("Found "+str(len(ancestorList2))+" good lineages (pass1)")
 
-        Util.log("Found "+str(len(ea_persons3))+" good lineages (pass2)")
+        for person in ancestorList2:
+            person.profile = Profile(person)
 
-        return ea_persons3
+        ancestorList3 = [person for person in ancestorList2 if self.isGoodLineagePass2(person)]
+
+        Util.log("Found "+str(len(ancestorList3))+" good lineages (pass2)")
+
+        return ancestorList3
 
 
-PersonDb.init(reload=str(os.getenv('RELOAD'))=="1")
 
-config = Config()
-profiles = Profiles(config)
+def main():
 
-profiles.updateEarliestAncestors()
+    PersonDb.init(reload=str(os.getenv('RELOAD'))=="1")
 
-lineages = profiles.getLineages()
+    ancestors = PersonList().getEarliestAncestors()
 
-history = History(config, lineages)
+    reporter = Reporter()
+    reporter.writeLineages(ancestors)
 
-reporter = Reporter(config, history)
-reporter.writeLineages(lineages)
-reporter.writeProspects(lineages)
 
+if __name__ == "__main__":
+    main()

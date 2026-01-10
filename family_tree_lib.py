@@ -12,6 +12,46 @@ import re
 class Util:
 
     @staticmethod
+    def getFlag(location):
+        flags = {
+                "Austria":"European_Flags-37.png",
+                "France":"European_Flags-46.png",
+                "Alsace":"European_Flags-46.png",
+                "Germany":"Flags.gif",
+                "Ger":"Flags.gif",
+                "Rhineland":"Flags.gif",
+                "Hungary":"European_Flags-48.png",
+                "Ireland":"Ireland_Flags.png",
+                "Netherlands":"European_Flags-54.png",
+                "Denmark":"Project_Denmark.png",
+                "Luxembourg":"European_Flags-51.png",
+                "Holland":"European_Flags-54.png",
+                "Prussia":"Flags-12.jpg",
+                "Romania":"European_Flags-19.png",
+                "Russia":"European_Flags-32.png",
+                "Switzerland":"Flags-6.png",
+                "Ukraine":"European_Flags-25.png",
+                "United Kingdom":"Flags-3.jpg",
+                "England":"WikiTree-57.png",
+                "Canada":"Flags_of_Canada-18.png",
+                "USA":"50star.gif",
+                "PA":"50star.gif",
+                "MD":"50star.gif",
+                "NY":"50star.gif",
+                "KY":"50star.gif",
+                "TN":"50star.gif",
+                "OH":"50star.gif",
+                "IN":"50star.gif",
+                "NJ":"50star.gif",
+                "VA":"50star.gif",
+                "NC":"50star.gif",
+                }
+        if location in flags:
+            return flags[location]
+        return ""
+
+
+    @staticmethod
     def getAbbreviatedLocation(location):
         abbrs = [
         ('Germany', 'Ger'),
@@ -128,7 +168,11 @@ class Util:
 
     @staticmethod
     def getLatestDataDir():
-        return sorted([d for d in os.listdir('.') if d.startswith('data_20')], reverse=True)[0]
+        data_dirs = [d for d in os.listdir('.') if d.startswith('data_20')]
+        if len(data_dirs)>0:
+            return sorted(data_dirs)[-1]  #latest dir is last
+        else:
+            return None
 
     @staticmethod
     def getLatestDataDate():
@@ -249,6 +293,7 @@ class PersonDb:
             os.remove(tmp_db_path)
 
         PersonDb.connection = sqlite3.connect(tmp_db_path)
+        PersonDb.connection.row_factory = lambda cursor, row: {col[0] : row[i] for i,col in enumerate(cursor.description)}
         PersonDb.cursor = PersonDb.connection.cursor()
 
 
@@ -281,18 +326,18 @@ class PersonDb:
         PersonDb.cursor.execute("INSERT OR REPLACE INTO marriage VALUES (?,?,?)", (id1, id2, marriageYear))
 
     def putPerson(person):
-        PersonDb.cursor.execute("INSERT OR REPLACE INTO person VALUES (?,?, ?,?,?, ?,?, ?,?,?,?, ?)", (person.id, person.wtId, person.name, person.fatherId, person.motherId, person.firstName, person.lastNameAtBirth, person.birthYear, person.birthPlace, person.deathYear, person.deathPlace, person.touched))
+        PersonDb.cursor.execute("INSERT OR REPLACE INTO person(id,wtId, name,fatherId,motherId, firstName,lastNameAtBirth, birthYear,birthPlace,deathYear,deathPlace, touched) VALUES (?,?, ?,?,?, ?,?, ?,?,?,?, ?)", (person.id, person.wtId, person.name, person.fatherId, person.motherId, person.firstName, person.lastNameAtBirth, person.birthYear, person.birthPlace, person.deathYear, person.deathPlace, person.touched))
 
     def getPersonById(id):
         if id and int(id) > 0:
             rows = PersonDb.cursor.execute("SELECT id, wtId, name, fatherId, motherId, firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched FROM person WHERE id=? LIMIT 100",(id,)).fetchall()
             if len(rows) > 0:
-                return Person(rows[0][0],rows[0][1],rows[0][2],rows[0][3],rows[0][4],rows[0][5],rows[0][6],rows[0][7],rows[0][8],rows[0][9],rows[0][10],rows[0][11])
+                return Person(rows[0])
 
     def getPersonByWtId(wtId):
         rows = PersonDb.cursor.execute("SELECT id, wtId, name, fatherId, motherId, firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched FROM person WHERE wtId=? LIMIT 100",(wtId,)).fetchall()
         if len(rows) > 0:
-            return Person(rows[0][0],rows[0][1],rows[0][2],rows[0][3],rows[0][4],rows[0][5],rows[0][6],rows[0][7],rows[0][8],rows[0][9],rows[0][10],rows[0][11])
+            return Person(rows[0])
         else:
             sys.stderr.write("Person not found. wtId="+wtId+"\n")
 
@@ -300,7 +345,7 @@ class PersonDb:
         rows = PersonDb.cursor.execute("SELECT id, wtId, name, fatherId, motherId, firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched FROM person WHERE UPPER(name) LIKE ?",("%"+name.upper()+"% LIMIT 100",)).fetchall()
         persons = []
         for row in rows:
-            persons.append(Person(row[0],row[1],row[2],row[3],row[4],row[5],rows[6],rows[7],rows[8],rows[9],rows[10],rows[11]))
+            persons.append(Person(row))
         return persons
 
     def getPersonsByParent(parentId):
@@ -308,7 +353,7 @@ class PersonDb:
         if parentId and int(parentId)>0:
             rows = PersonDb.cursor.execute("SELECT id, wtId, name, fatherId, motherId, firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched FROM person WHERE fatherId=? or motherId=? LIMIT 100",(parentId,parentId)).fetchall()
             for row in rows:
-                persons.append(Person(row[0],row[1],row[2],row[3],row[4],row[5],row[6],row[7],row[8],row[9],row[10],row[11]))
+                persons.append(Person(row))
         return persons
 
 
@@ -319,7 +364,7 @@ class PersonDb:
             Util.logr("Loading "+surname+"...")
             rows = PersonDb.cursor.execute("SELECT id, wtId, name, fatherId, motherId,  firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace,      touched FROM person WHERE lastNameAtBirth = ? LIMIT 200000",(surname,)).fetchall()
             for row in rows:
-                persons[row[0]] = Person(row[0],row[1],row[2],row[3],row[4],row[5],row[6],row[7],row[8],row[9],row[10],row[11])
+                persons[row['id']] = Person(row)
 
         Util.log("Done. loaded "+str(len(persons))+" persons")
         return persons
@@ -329,7 +374,7 @@ class PersonDb:
         rows = PersonDb.cursor.execute("SELECT DISTINCT case when id2=? then id1 else id2 end spouseId FROM marriage WHERE id1=? or id2=?",(id,id,id)).fetchall()
         spouseIds = []
         for row in rows:
-            spouseIds.append(row[0])
+            spouseIds.append(row['spouseId'])
 
         return spouseIds
 
@@ -338,11 +383,11 @@ class PersonDb:
 
         persons = []
         for row in rows:
-            person = PersonDb.getPersonById(row[0])
+            person = PersonDb.getPersonById(row['id'])
             if person is not None:
                 persons.append(person)
             else:
-                print("getPersonsByCategory "+category+": Cannot find userId: "+row[0])
+                print("getPersonsByCategory "+category+": Cannot find userId: "+row['id'])
 
         return persons
 
@@ -411,10 +456,15 @@ class PersonDb:
                 #
 
 
-                father = row['Father']
-                mother = row['Mother']
+                fatherId = row['Father']
+                motherId = row['Mother']
 
-                person = Person(id, wtId, name, father, mother, firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched)
+                row = {"id":id, "wtId":wtId, "name":name, "fatherId":fatherId, "motherId":motherId,
+                       "firstName":firstName, "lastNameAtBirth":lastNameAtBirth,
+                       "birthYear":birthYear, "birthPlace":birthPlace, "deathYear":deathYear, "deathPlace":deathPlace,
+                       "touched":touched}
+
+                person = Person(row)
 
                 PersonDb.putPerson(person)
 
@@ -472,21 +522,21 @@ class PersonDb:
 
 class Person:
 
-    def __init__(self, id, wtId, name, fatherId, motherId,
-            firstName, lastNameAtBirth, birthYear, birthPlace, deathYear, deathPlace, touched):
-        self.id = id
-        self.wtId = wtId
-        self.name = name
-        self.fatherId = fatherId
-        self.motherId = motherId
+    def __init__(self, row):
 
-        self.firstName = firstName
-        self.lastNameAtBirth = lastNameAtBirth
-        self.birthYear = birthYear
-        self.birthPlace = birthPlace
-        self.deathYear = deathYear
-        self.deathPlace = deathPlace
-        self.touched = touched
+        self.id = row['id']
+        self.wtId = row['wtId']
+        self.name = row['name']
+        self.fatherId = row['fatherId']
+        self.motherId = row['motherId']
+
+        self.firstName = row['firstName']
+        self.lastNameAtBirth = row['lastNameAtBirth']
+        self.birthYear = row['birthYear']
+        self.birthPlace = row['birthPlace']
+        self.deathYear = row['deathYear']
+        self.deathPlace = row['deathPlace']
+        self.touched = row['touched']
 
         self.prevPerson = None
         self.nextPerson = None
