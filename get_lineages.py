@@ -292,6 +292,11 @@ class Reporter:
     self.config = Config()
     self.history = History(self.config)
 
+  def readOldLineage(self):
+    path = self.config.studySurname+"_Lineages-{time}.txt".format(time=self.config.args.last_update)
+    with open(path, 'r') as file:
+        return file.read().rstrip()
+
 
   def writeLineages(self, persons):
 
@@ -330,8 +335,11 @@ class Reporter:
         ancestor_notes = []
         ancestor_color = ''
         if wtId in self.config.uncertainFatherWikiIds:
-            ancestor_notes.append('[uncertain father]')
+            ancestor_notes.append('Uncertain Father')
 
+        fsId = person.profile.getFamilySearchId()
+        if fsId:
+            ancestor_notes.append("[https://www.familysearch.org/tree/person/details/"+fsId+" "+fsId+"]")
 
         if person.isRecentEmigrant():
             ancestor_notes.append("Recent Emigrant")
@@ -342,6 +350,7 @@ class Reporter:
             ancestor_notes.append(lineage)
             ancestor_color = 'WhiteSmoke'
 
+        dnaLines = {}
         for line in person.lines:
 
             if wtId != line.wtId:
@@ -349,8 +358,14 @@ class Reporter:
             else:
                 lineage = line.lineName
 
+            if line.inStudy == False:
+                dnaLines[line.lineName] = line
+
             ancestor_notes.append(lineage)
             ancestor_color = line.color
+
+        if len(dnaLines)>1:
+            ancestor_notes.append("Multiple DNA lines?")
 
 
         dna_text = ''
@@ -365,9 +380,14 @@ class Reporter:
 
         change = self.history.whatChanged(person)
 
-        flag_img = Util.getFlag(person.birthPlace)
+        if person.birthPlace:
+            flag_img = Util.getFlag(person.birthPlace)
+        elif person.deathPlace:
+            flag_img = Util.getFlag(person.deathPlace)
+        else:
+            flag_img = None
         if flag_img:
-            flag = "[[Image:"+flag_img+"|35px |"+person.birthPlace+"]]&nbsp;"
+            flag = "[[Image:"+flag_img+"|35px |"+person.birthPlace+"]] "
         else:
             flag = ""
 
@@ -381,14 +401,25 @@ class Reporter:
         else:
             notes = ""
 
+        if fsId:
+            statusColor = " bgcolor=#ECFADC |"
+        else:
+            statusColor = ""
+
+        if person.wtId not in self.readOldLineage():
+            statusColor = " bgcolor=LightBlue |"
+
+        if len(dnaLines)>1:
+            statusColor = " bgcolor=#FFC1C3 |"
 
 
-        fp.write ("""| {rank}
-| {numDescendants}
-| {change}
-| {color} {flag} {ancestor} {notes}
-| {dna}
+        fp.write ("""|{statusColor} {rank}
+|{numDescendants}
+|{change}
+|{color} {flag} {ancestor} {notes}
+|{dna}
 |-\n""".format(
+            statusColor=statusColor,
             rank=n,
             numDescendants=len(person.descendants),
             change=change,
@@ -424,7 +455,6 @@ class PersonList:
         for pid in self.persons:
             if self.persons[pid].wtId == wtId:
                 return self.persons[pid]
-        print("Cannot find: "+wtId)
 
     def calculateEarliestAncestors(self):
         self.earliestAncestors = {}
@@ -471,9 +501,6 @@ class PersonList:
 
     def getEarliestAncestors(self):
 
-        lineageList = LineageList(self.config)
-
-
         Util.logr("Calculating lineages ...")
         self.calculateEarliestAncestors()
 
@@ -488,24 +515,23 @@ class PersonList:
         for person in ancestorList1:
             person.lines = lineages.findDnaLine(person)
 
-            bonus = False
+            multipleCommonLineages = False
             person.maxLineageDescendantCount = len(person.descendants)
             for lineage in person.lines:
                 if lineage.lineName != 'In Study':
-                    for relatedLineageWtId in lineageList.findLinesByName(lineage.lineName):
+                    for relatedLineageWtId in lineages.findLinesByName(lineage.lineName):
                         relatedPerson = self.findPersonByWtId(relatedLineageWtId)
                         if relatedPerson:
                             lineageDescendantCount = len(relatedPerson.descendants)
                             if person.maxLineageDescendantCount < lineageDescendantCount:
                                 person.maxLineageDescendantCount = lineageDescendantCount
-                            bonus = True
-                if lineage.lineName == 'Phillip in TN':
-                    print("{p} {cnt} {cnt2}".format(p=person, cnt=len(person.descendants), cnt2=person.maxLineageDescendantCount))
+                            multipleCommonLineages = True
 
-            if bonus:
+            if multipleCommonLineages:
                 person.maxLineageDescendantCount = person.maxLineageDescendantCount + 0.001
 
-        ancestorList2 = sorted([person for person in ancestorList1 if self.isGoodLineagePass1(person)], key=lambda person: (-person.maxLineageDescendantCount, -len(person.descendants), person.birthYear))
+        ancestorList2 = sorted([person for person in ancestorList1 if self.isGoodLineagePass1(person)],
+                                    key=lambda person: (-person.maxLineageDescendantCount, -len(person.descendants), person.birthYear))
 
         Util.log("Found "+str(len(ancestorList2))+" good lineages (pass1)")
 

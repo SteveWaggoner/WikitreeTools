@@ -9,4 +9,5 @@ if ! [ -f Wagner_Lineages-$PREV_DATE.txt ]; then
     time ./get_lineages.py Wagner Wagoner Waggoner Waggener Wagener --exact 2 --date $PREV_DATE
 fi
 time ./get_lineages.py Wagner Wagoner Waggoner Waggener Wagener "Van Wagner" "Van Wagener" --exact 2 --date $DATE --last-update $PREV_DATE
+#time python -m cProfile ./get_lineages.py Wagner Wagoner Waggoner Waggener Wagener "Van Wagner" "Van Wagener" --exact 2 --date $DATE --last-update $PREV_DATE
 

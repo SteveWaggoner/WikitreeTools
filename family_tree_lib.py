@@ -26,14 +26,18 @@ class Util:
                 "Denmark":"Project_Denmark.png",
                 "Luxembourg":"European_Flags-51.png",
                 "Holland":"European_Flags-54.png",
+                "Neth":"European_Flags-54.png",
                 "Prussia":"Flags-12.jpg",
                 "Romania":"European_Flags-19.png",
                 "Russia":"European_Flags-32.png",
                 "Switzerland":"Flags-6.png",
                 "Ukraine":"European_Flags-25.png",
+                "Czech":"European_Flags-42.png",
+                "Poland":"Flags-17.jpg",
                 "United Kingdom":"Flags-3.jpg",
                 "England":"WikiTree-57.png",
                 "Canada":"Flags_of_Canada-18.png",
+                "Belgium":"Flags-1.jpg",
                 "USA":"50star.gif",
                 "PA":"50star.gif",
                 "MD":"50star.gif",
@@ -45,19 +49,30 @@ class Util:
                 "NJ":"50star.gif",
                 "VA":"50star.gif",
                 "NC":"50star.gif",
+                "GA":"50star.gif",
+                "TX":"50star.gif",
+                "IL":"50star.gif",
+                "SD":"50star.gif",
+                "AZ":"50star.gif",
+                "WI":"50star.gif",
+                "IA":"50star.gif",
+                "Michigan":"50star.gif",
+                "Massachusetts":"50star.gif",
+                "Australia":"Flags-5.png",
                 }
-        if location in flags:
-            return flags[location]
+        abbr_location = Util.getAbbreviatedLocation(location)
+        if abbr_location in flags:
+            return flags[abbr_location]
         return ""
 
 
     @staticmethod
     def getAbbreviatedLocation(location):
         abbrs = [
-        ('Germany', 'Ger'),
-        ('Deutschland', 'Ger'),
-        ('Saxony', 'Ger'),
-        ('Heiliges R', 'Ger'),
+        ('Germany', 'Germany'),
+        ('Deutschland', 'Germany'),
+        ('Saxony', 'Germany'),
+        ('Heiliges R', 'Germany'),
         ('Pennsylvania', 'PA'),
         ('North Carolina', 'NC'),
         ('Alaska', 'AK'),
@@ -66,6 +81,8 @@ class Util:
         ('France', 'France'),
         ('Illinois', 'IL'),
         ('Virginia', 'VA'),
+        ('South Dakota', 'SD'),
+        ('Arizona', 'AZ'),
         (' Pa.', 'PA'),
         ('Luxembourg', 'Luxembourg'),
         ('Switzerland', 'Switzerland'),
@@ -79,21 +96,28 @@ class Util:
         (', MA', 'MA'),
         (', KY', 'KY'),
         (', CA', 'CA'),
-        (', GER', 'Ger'),
+        (', GER', 'Germany'),
         (', Ill', 'IL'),
+        (', N.C.', 'NC'),
+        ('Queensland','Australia'),
+        ('Hessen','Germany'),
         ('West Prussia', 'Prussia'),
         ('Rhineland', 'Rhineland'),
         ('Prussia', 'Prussia'),
+        ('Rheinprovinz', 'Germany'),
+        (', Baden', 'Germany'),
+        ('Ernsbach', 'Germany'),
+        ('Duchy of Nassau', 'Germany'),
         ('Denmark', 'Denmark'),
         ('South Africa','South Africa'),
         ('Worcester, Cape Colony', 'South Africa'),
         ('Czechoslovakia','Czech'),
         ('Czech','Czech'),
         ('Ungarn','Hungary'),
-        ('Kloppenheim', 'Ger'),
-        ('Württemberg','Ger'),
+        ('Kloppenheim', 'Germany'),
+        ('Württemberg','Germany'),
         ('Alsace', 'Alsace'),
-        ('Nederland', 'Neth'),
+        ('Nederland', 'Netherlands'),
         ('Indiana', 'IN'),
         ('Ontario', 'Canada'),
         ('Kentucky', 'KY'),
@@ -132,11 +156,13 @@ class Util:
         ('New York', 'NY'),
         ('Australia','Australia'),
         ('Massachusetts','Massachusetts'),
-        ('Palatinate', 'Ger'),
-        ('Deutsches Reich', 'Ger'),
+        ('Palatinate', 'Germany'),
+        ('Deutsches Reich', 'Germany'),
         ('Ireland','Ireland'),
         ('Idaho','Idaho'),
         ('Maine','Maine'),
+        ('N.C.','NC'),
+        ('New Hampshire','New Hampshire'),
         ]
         for abbr in abbrs:
             (partial, label) = abbr
@@ -420,8 +446,8 @@ class PersonDb:
                 lastNameCurrent = row["Last Name Current"]
                 birthYear = row["Birth Date"][0:4]
                 deathYear = row["Death Date"][0:4]
-                birthPlace = Util.getAbbreviatedLocation(row["Birth Location"])
-                deathPlace = Util.getAbbreviatedLocation(row["Death Location"])
+                birthPlace = row["Birth Location"]
+                deathPlace = row["Death Location"]
                 touched = row["Touched"]
 
                 name = firstName
@@ -440,8 +466,8 @@ class PersonDb:
 
 
                 # make pretty label
-                birthText = (birthYear + ' ' + birthPlace).strip()
-                deathText = (deathYear + ' ' + deathPlace).strip()
+                birthText = (birthYear + ' ' + Util.getAbbreviatedLocation(birthPlace)).strip()
+                deathText = (deathYear + ' ' + Util.getAbbreviatedLocation(deathPlace)).strip()
 
                 dates = ''
                 if birthText != '' and deathText != '':
@@ -721,7 +747,7 @@ class Profile:
 
     def dnaYCnt(self):
         try:
-            start = '<ul class="y">'
+            start = '<ul class="unstyled dna dna-y">'
             end = '</ul>'
             y_dna = Util.getBetween(self.profileText, start, end)
             y_dna_cnt = y_dna.count('<li>')
@@ -731,23 +757,34 @@ class Profile:
 
     def dnaAuCnt(self):
         try:
-            start = '<ul class="au">'
+            start = '<ul class="unstyled dna dna-au">'
             end = '</ul>'
             au_dna = Util.getBetween(self.profileText, start, end)
-            au_dna_cnt = au_dna.count('<li>')
+            au_dna_cnt = au_dna.count('<li')
         except:
             au_dna_cnt = 0
         return au_dna_cnt
 
     def dnaHasGedmatch(self):
         try:
-            start = '<ul class="au">'
+            start = '<ul class="unstyled dna dna-au">'
             end = '</ul>'
             au_dna = Util.getBetween(self.profileText, start, end)
-            has_gedmatch = au_dna.count('gedmatch.com') > 0
+            has_gedmatch = au_dna.count('GEDmatch') > 0
         except:
             has_gedmatch = False
         return has_gedmatch
+
+    def getFamilySearchId(self):
+        try:
+            start = "https://www.familysearch.org/tree/person/"
+            end = "\""
+            fs_id = Util.getBetween(self.profileText, start, end)
+            fs_id = fs_id.replace("details/","")
+            fs_id = fs_id.replace("sources/","")
+        except:
+            fs_id = None
+        return fs_id
 
 
     def quality(self):
