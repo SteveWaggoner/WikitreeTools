@@ -333,7 +333,7 @@ class Reporter:
 
         ancestor = '[[{wikitreeId}|{label}]]'.format(wikitreeId=wtId, label=label)
         ancestor_notes = []
-        ancestor_color = ''
+        ancestor_color = 'WhiteSmoke'
         if wtId in self.config.uncertainFatherWikiIds:
             ancestor_notes.append('Uncertain Father')
 
@@ -341,14 +341,13 @@ class Reporter:
         if fsId:
             ancestor_notes.append("[https://www.familysearch.org/tree/person/details/"+fsId+" "+fsId+"]")
 
+
         if person.isRecentEmigrant():
             ancestor_notes.append("Recent Emigrant")
-            ancestor_color = 'WhiteSmoke'
 
         if wtId in self.config.labelLineageWikiIds:
             lineage = self.config.labelLineageWikiIds[wtId]
             ancestor_notes.append(lineage)
-            ancestor_color = 'WhiteSmoke'
 
         dnaLines = {}
         for line in person.lines:
@@ -362,7 +361,9 @@ class Reporter:
                 dnaLines[line.lineName] = line
 
             ancestor_notes.append(lineage)
-            ancestor_color = line.color
+
+            if line.lineName=='Phillip in TN':
+                ancestor_color = 'Gainsboro'
 
         if len(dnaLines)>1:
             ancestor_notes.append("Multiple DNA lines?")
@@ -535,8 +536,12 @@ class PersonList:
 
         Util.log("Found "+str(len(ancestorList2))+" good lineages (pass1)")
 
+        i = 0
         for person in ancestorList2:
             person.profile = Profile(person)
+            i = i + 1
+            print(f"{i} of {len(ancestorList2)} ({round(100 * i / len(ancestorList2),1)}%)      \r", end="")
+        print("done             \r", end="")
 
         ancestorList3 = [person for person in ancestorList2 if self.isGoodLineagePass2(person)]
 
@@ -551,6 +556,14 @@ def main():
     PersonDb.init(reload=str(os.getenv('RELOAD'))=="1")
 
     ancestors = PersonList().getEarliestAncestors()
+
+    for person in ancestors:
+        file_path = f"cache/{person.wtId}.webpage"
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"The {file_path} file was deleted\r  ",end="")
+        else:
+            print(f"The {file_path} file does not exist")
 
     reporter = Reporter()
     reporter.writeLineages(ancestors)
