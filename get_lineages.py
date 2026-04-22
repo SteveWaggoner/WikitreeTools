@@ -558,7 +558,7 @@ def main():
     ancestors = PersonList().getEarliestAncestors()
 
     for person in ancestors:
-        file_path = f"cache/{person.wtId}.webpage"
+        file_path = f"cache/{person.wtId.replace(' ','_')}.webpage"
         if os.path.exists(file_path):
             os.remove(file_path)
             print(f"The {file_path} file was deleted\r  ",end="")

@@ -41,7 +41,6 @@ UncertainFather - [[Waggoner-1241|Jacob Johann (Waggoner) Wagner (abt.1717-abt.1
 LabelLineage - [[Waggoner-1241|Jacob Johann (Waggoner) Wagner (abt.1717-abt.1784)]] - Jans in SC
 
 UncertainFather - [[Wagner-801|Jacob Wagner Sr. (1717-1799)]]
-LabelLineage - [[Wagner-801|Jacob Wagner Sr. (1717-1799)]] - Old Jacob 1717 in NC
 
 
 IgnoreLineage - [[Wagner-8781|Werner Wagner (1547-)]]
@@ -97,6 +96,7 @@ LabelLineage - [[Wagner-14660|Georg Wagner (1611-1690)]] - Rottenburg
 LabelLineage - [[Waggoner-895|Francis Anthony Waggoner (abt.1728-abt.1798)]] - GW Lifeguard
 
 LabelLineage - [[Wagner-11562|Johann Gottfried Wagner (1809-1893)]] - Australia
+
 
 UncertainFather - [[Wagner-15986|Christian Carl Fredrich Wagner (1836-1899)]]
 UncertainFather - [[Wagner-15173|Gottfried Andreas Wagner (1824-1903)]]
