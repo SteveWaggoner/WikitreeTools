@@ -132,17 +132,27 @@ class LineageList:
 
     def loadDnaLineages(self):
 
-        dnaTabName = 'Space:{surname}_Name_Study_-_DNA'.format(surname=self.config.studySurname)
-        dnaTab = Util.getWebPage('https://www.wikitree.com/wiki/{dnaTabName}'.format(dnaTabName=dnaTabName))
+        dnaTab = Util.getWebPage(label="Wagner_Name_Study_DNA")
+
         start = '<th> Lineage'
         end = '</table>'
-        for classified in Util.getBetween(dnaTab, start, end).split('<tr>'):
-            color = Util.getBetween(classified, ' bgcolor="', '"')
-            lineName = Util.getBetween(Util.getBetween(classified, ' bgcolor="',
-                                  '/td>'), '>', '<').strip()
-            wtId = Util.getBetween(classified, '<a href="/wiki/', '"')
 
-            self.allLineages[wtId] = Lineage(color, lineName, wtId, False)
+        for row in Util.getBetween(dnaTab, start, end).split('<tr'):
+            cells = row.split('<td')
+
+            #skip headers
+            if len(cells) == 1:
+                continue
+
+            color    = Util.getBetween(cells[1], ' bgcolor="', '"')
+            lineName = Util.getBetween(cells[1], '>', '<').strip()
+            if len(cells) > 4:
+                wtId = Util.getBetween(cells[4],  '<a href="https://www.wikitree.com/wiki/', '"')
+            else:
+                wtId = ''
+
+            if wtId:
+                self.allLineages[wtId] = Lineage(color, lineName, wtId, False)
 
     def loadStudyLineages(self):
         for studyPerson in self.config.studyPersons:
@@ -270,7 +280,7 @@ class History:
 
 
         difCnt = len(newDescendantList) - len(oldDescendantList)
-        if difCnt == 0:
+        if difCnt == 0 and  whatChangedId == None:
             difCnt = ""
         elif difCnt > 0:
             difCnt = "+"+str(difCnt)
@@ -292,7 +302,44 @@ class Reporter:
     self.config = Config()
     self.history = History(self.config)
 
-  def readOldLineage(self):
+  def findAncestor(self, person, lineages):
+    index = -1
+    ancestor={}
+    for line in lineages.splitlines():
+        if line == "|-":
+            index = 0
+
+        if index==1:
+            ancestor['color'] = Util.getBetween(line, 'bgcolor=', ' ')
+
+        if index==4:
+
+            first_part = line.split('<sup>')[0]
+            if "[[Image:" in first_part:
+                first_part2 = Util.after(first_part,']]')
+            else:
+                first_part2 = first_part
+
+            ancestor['wtId'] = Util.getBetween(first_part2,"[[", "|")
+            ancestor['name'] = Util.getBetween(Util.after(first_part2,'[['),"|","]]")
+            ancestor['fsid'] = Util.getBetween(line,'[https://www.familysearch.org/tree/person/details/', ' ')
+        if index==5:
+            ancestor['dna'] = Util.after(line,'|')
+            if person.wtId == ancestor['wtId']:
+                return ancestor
+
+        index += 1
+
+    return {}
+
+  def fallback(self, txt, attrib, key):
+      if txt == '' and key in attrib:
+          return attrib[key]
+      else:
+          return txt
+
+
+  def readOldLineages(self):
     path = self.config.studySurname+"_Lineages-{time}.txt".format(time=self.config.args.last_update)
     with open(path, 'r') as file:
         return file.read().rstrip()
@@ -329,6 +376,8 @@ class Reporter:
             Util.log("Ignoring lineage "+label)
             continue
 
+        prev_ancestor = self.findAncestor(person, self.readOldLineages())
+
         n = n + 1
 
         ancestor = '[[{wikitreeId}|{label}]]'.format(wikitreeId=wtId, label=label)
@@ -338,6 +387,7 @@ class Reporter:
             ancestor_notes.append('Uncertain Father')
 
         fsId = person.profile.getFamilySearchId()
+        fsId = self.fallback(fsId, prev_ancestor, 'fsId')
         if fsId:
             ancestor_notes.append("[https://www.familysearch.org/tree/person/details/"+fsId+" "+fsId+"]")
 
@@ -379,6 +429,8 @@ class Reporter:
         if person.profile.dnaHasGedmatch() == True:
             dna_text = dna_text + ', GEDMatch'
 
+        dna_text = self.fallback(dna_text, prev_ancestor, 'dna')
+
         change = self.history.whatChanged(person)
 
         if person.birthPlace:
@@ -403,15 +455,21 @@ class Reporter:
             notes = ""
 
         if fsId:
-            statusColor = " bgcolor=#ECFADC |"
+            statusColor = "#ECFADC"
         else:
             statusColor = ""
 
-        if person.wtId not in self.readOldLineage():
-            statusColor = " bgcolor=LightBlue |"
+        if person.wtId not in self.readOldLineages():
+            statusColor = "LightBlue"
 
         if len(dnaLines)>1:
-            statusColor = " bgcolor=#FFC1C3 |"
+            statusColor = "#FFC1C3"
+
+        statusColor = self.fallback(statusColor, prev_ancestor, 'color')
+
+        if statusColor:
+            statusColor = " bgcolor="+statusColor+" |"
+
 
 
         fp.write ("""|{statusColor} {rank}
@@ -440,9 +498,10 @@ class Reporter:
 
 class PersonList:
 
-    def __init__(self):
+    def __init__(self, reporter):
         self.config = Config()
         self.persons = {}
+        self.reporter = reporter
         self.load()
 
     def load(self):
@@ -487,6 +546,9 @@ class PersonList:
 
     def isGoodLineagePass2(self, person):
 
+        prev_ancestors = self.reporter.readOldLineages()
+        has_prev_ancestor = len(self.reporter.findAncestor(person, prev_ancestors))
+
         has_dna = person.profile.dnaHasGedmatch() or person.profile.dnaYCnt() > 0
 
         good = person.gen >= self.config.args.min_gen \
@@ -495,7 +557,8 @@ class PersonList:
             or len(person.lines) > 0 \
             or person.id   in self.config.studyIds \
             or person.wtId in self.config.labelLineageWikiIds \
-            or person.wtId in self.config.uncertainFatherWikiIds
+            or person.wtId in self.config.uncertainFatherWikiIds \
+            or has_prev_ancestor
 
         return good
 
@@ -555,17 +618,8 @@ def main():
 
     PersonDb.init(reload=str(os.getenv('RELOAD'))=="1")
 
-    ancestors = PersonList().getEarliestAncestors()
-
-    for person in ancestors:
-        file_path = f"cache/{person.wtId.replace(' ','_')}.webpage"
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"The {file_path} file was deleted\r  ",end="")
-        else:
-            print(f"The {file_path} file does not exist")
-
     reporter = Reporter()
+    ancestors = PersonList(reporter).getEarliestAncestors()
     reporter.writeLineages(ancestors)
 
 

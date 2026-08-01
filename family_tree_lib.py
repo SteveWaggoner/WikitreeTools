@@ -7,6 +7,8 @@ import os
 import argparse
 import gzip
 import re
+import random
+from pathlib import Path
 
 ####################################################
 class Util:
@@ -178,7 +180,7 @@ class Util:
 
     @staticmethod
     def before(txt, beforeThis):
-        tokens = re.split(beforeThis, txt, maxsplit=1)
+        tokens = txt.split(beforeThis, maxsplit=1)
         if len(tokens)>1:
             return tokens[0]
         else:
@@ -186,7 +188,7 @@ class Util:
 
     @staticmethod
     def after(txt, afterThis):
-        tokens = re.split(afterThis, txt, maxsplit=1)
+        tokens = txt.split(afterThis, maxsplit=1)
         if len(tokens)>1:
             return tokens[1]
         else:
@@ -210,32 +212,16 @@ class Util:
         return text.split("-")[-1].strip()
 
     @staticmethod
-    def getWebPage(url,label=None, use_cache=True):
+    def getWebPage(label):
 
-        url = url.replace(" ","_")
+        label = label.replace(" ","_")
 
-        import urllib.request
-        try:
-            if label:
-                label = label.replace(" ","_")
-
-                cache_path = "cache/"+label+".webpage"
-                if os.path.isfile(cache_path) and use_cache:
-                    contents = open(cache_path, 'r').read()
-                else:
-                    print("reading "+url)
-                    contents = urllib.request.urlopen(url).read().decode("utf8")
-                    with open(cache_path, "w") as cache_fp:
-                        cache_fp.write(contents)
-
-            else:
-                print("reading "+url)
-                contents = urllib.request.urlopen(url).read().decode("utf8")
-
-
+        cache_path = "cache/"+label+".webpage"
+        if os.path.isfile(cache_path):
+            contents = Path(cache_path).read_text(encoding='utf-8')
             return contents
-        except:
-            Util.log("Failed to read web page: "+url)
+        else:
+            Util.log("Failed to read web page: "+cache_path)
             return ''
 
     @staticmethod
@@ -670,7 +656,7 @@ class Profile:
     def __init__(self, person):
         self.person = person
         self.use_cache = os.getenv('NOCACHE', '0') == '0'
-        self.profileText = Util.getWebPage("https://www.wikitree.com/wiki/"+person.wtId, person.wtId, use_cache=self.use_cache)
+        self.profileText = Util.getWebPage(label=person.wtId)
 
 
     def sections(self):
